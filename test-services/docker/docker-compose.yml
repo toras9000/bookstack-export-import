@@ -1,0 +1,122 @@
+# This compose avoids the concurrent progression of the burdensome initialization process, so it waits for each container to become healthy before proceeding to the next one.
+services:
+  db1:
+    # (windows + docker desktop + wsl2 + mariadb + bookstack) is initial migration failed.
+    # mysql is used as an alternative for samples.
+    image: mysql:8
+    restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - bookstack-db1-container
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "--host=localhost", "--user=root"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    volumes:
+      - ./volumes/service1/db:/var/lib/mysql
+    environment:
+      - TZ=Asia/Tokyo
+      - MYSQL_ROOT_PASSWORD=bookstack_rootpass
+      - MYSQL_DATABASE=bookstack_store
+      - MYSQL_USER=bookstack_user
+      - MYSQL_PASSWORD=bookstack_pass
+
+  db2:
+    image: mysql:8
+    restart: unless-stopped
+    depends_on:
+      db1:
+        condition: service_healthy
+    networks:
+      default:
+        aliases:
+          - bookstack-db2-container
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "--host=localhost", "--user=root"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    volumes:
+      - ./volumes/service2/db:/var/lib/mysql
+    environment:
+      - TZ=Asia/Tokyo
+      - MYSQL_ROOT_PASSWORD=bookstack_rootpass
+      - MYSQL_DATABASE=bookstack_store
+      - MYSQL_USER=bookstack_user
+      - MYSQL_PASSWORD=bookstack_pass
+
+  app1:
+    image: lscr.io/linuxserver/bookstack:version-v23.12.2
+    restart: unless-stopped
+    depends_on:
+      db2:
+        condition: service_healthy
+    networks:
+      default:
+        aliases:
+          - bookstack-app1-container
+    healthcheck:
+      test: ["CMD", "curl", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 40
+      start_period: 30s
+    ports:
+      - "9971:80"
+    volumes:
+      - ./volumes/service1/app:/config
+      - ./assets/init:/custom-cont-init.d
+      - ./assets/template:/assets/template
+    environment:
+      - TZ=Asia/Tokyo
+      - PUID=1000
+      - PGID=1000
+      - APP_URL=http://localhost:9971
+      - DB_HOST=bookstack-db1-container
+      - DB_DATABASE=bookstack_store
+      - DB_USER=bookstack_user
+      - DB_PASS=bookstack_pass
+      - CUSTOM_APP_THEME=my-theme
+      - CUSTOM_API_REQUESTS_PER_MIN=180
+      - CUSTOM_TEST_TOKEN_ID=00001111222233334444555566667777
+      - CUSTOM_TEST_TOKEN_SECRET=88889999aaaabbbbccccddddeeeeffff
+
+  app2:
+    image: lscr.io/linuxserver/bookstack:version-v23.12.2
+    restart: unless-stopped
+    depends_on:
+      app1:
+        condition: service_healthy
+    networks:
+      default:
+        aliases:
+          - bookstack-app2-container
+    healthcheck:
+      test: ["CMD", "curl", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 40
+      start_period: 30s
+    ports:
+      - "9972:80"
+    volumes:
+      - ./volumes/service2/app:/config
+      - ./assets/init:/custom-cont-init.d
+      - ./assets/template:/assets/template
+    environment:
+      - TZ=Asia/Tokyo
+      - PUID=1000
+      - PGID=1000
+      - APP_URL=http://localhost:9972
+      - DB_HOST=bookstack-db2-container
+      - DB_DATABASE=bookstack_store
+      - DB_USER=bookstack_user
+      - DB_PASS=bookstack_pass
+      - CUSTOM_APP_THEME=my-theme
+      - CUSTOM_API_REQUESTS_PER_MIN=180
+      - CUSTOM_TEST_TOKEN_ID=444455556666777788889999aaaabbbb
+      - CUSTOM_TEST_TOKEN_SECRET=ccccddddeeeeffff0000111122223333

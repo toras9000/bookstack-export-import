@@ -1,0 +1,4 @@
+*      -text
+*.csx  text
+*.sql  text eol=lf
+
