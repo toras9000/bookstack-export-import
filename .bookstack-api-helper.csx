@@ -5,6 +5,8 @@ using System.Threading;
 using Kokuban;
 using BookStackApiClient;
 using System.Net.Http;
+using System.Text.RegularExpressions;
+using System.Diagnostics.CodeAnalysis;
 
 /// <summary>API key information</summary>
 /// <param name="Token">API token</param>
@@ -24,12 +26,16 @@ public class BookStackClientHelper : IDisposable
     public BookStackClientHelper(Uri apiEndpoint, ApiKey apiKey, TextWriter? output = default, CancellationToken cancelToken = default)
     {
         this.Client = new BookStackClient(apiEndpoint, apiKey.Token, apiKey.Secret);
+        this.Http = new HttpClient();
         this.cancelToken = cancelToken;
         this.msgWriter = output ?? Console.Out;
     }
 
     /// <summary>BookStack client instance</summary>
     public BookStackClient Client { get; }
+
+    /// <summary>Http client instance</summary>
+    public HttpClient Http { get; }
 
     /// <summary>Helper method to retry at API request limit</summary>
     /// <param name="accessor">API request processing</param>
@@ -61,13 +67,120 @@ public class BookStackClientHelper : IDisposable
         await Try<int>(async c => { await accessor(c); return 0; });
     }
 
+    /// <summary>Attempt to detect the version of BookStack.</summary>
+    /// <param name="pageUri">BookStack page used for detection.</param>
+    /// <returns>Task to obtain version.</returns>
+    public async ValueTask<BookStackVersion?> DetectBookStackVersionAsync(Uri pageUri)
+    {
+        var page = await this.Http.GetStringAsync(pageUri);
+        var detector = new Regex(@"""http.+\.css\?version=v(.+)""");
+        var match = detector.Match(page);
+        if (match.Success && BookStackVersion.TryParse(match.Groups[1].Value, out var version))
+        {
+            return version;
+        }
+        return default;
+    }
+
+    /// <summary>Attempts to acquire information about the API user itself.</summary>
+    /// <returns>Task to obtain user information.</returns>
+    public async ValueTask<User> GetMeAsync()
+    {
+        // It is not possible to retrieve information about oneself through the API.
+        // I hope the following suggestions will pass.
+        // https://github.com/BookStackApp/BookStack/issues/4321
+        // This may be difficult since the API appears to be aimed at automating tasks rather than for external tools.
+
+        // Here, as an alternative method, the search API is used to search for the user's own items.
+        var found = await this.Try(c => c.SearchAsync(new("{owned_by:me}", count: 1), this.cancelToken));
+        var item = found.data.FirstOrDefault();
+        var owner = item switch
+        {
+            SearchContentBook => (await this.Try(c => c.ReadBookAsync(item.id, this.cancelToken))).owned_by,
+            SearchContentChapter => (await this.Try(c => c.ReadChapterAsync(item.id, this.cancelToken))).owned_by,
+            SearchContentPage => (await this.Try(c => c.ReadPageAsync(item.id, this.cancelToken))).owned_by,
+            SearchContentShelf => (await this.Try(c => c.ReadShelfAsync(item.id, this.cancelToken))).owned_by,
+            _ => new User(0, "Unknownw", "Unknown"),
+        };
+
+        return owner;
+    }
+
+    /// <summary>Dispose resources</summary>
     public void Dispose()
     {
         this.Client.Dispose();
+        this.Http.Dispose();
     }
 
     /// <summary>cancel token</summary>
     private readonly CancellationToken cancelToken;
     /// <summary>message output writer</summary>
     private readonly TextWriter msgWriter;
+}
+
+/// <summary>
+/// Data type representing the BookStack version
+/// </summary>
+public record BookStackVersion : IComparable<BookStackVersion>
+{
+    /// <summary>Constructor to decode version text.</summary>
+    /// <param name="version">Version text</param>
+    public BookStackVersion(string version)
+    {
+        var match = VersionPattern.Match(version);
+        if (!match.Success) throw new ArgumentException("Illegal");
+        this.Major = int.Parse(match.Groups["major"].Value);
+        this.Minor = int.Parse(match.Groups["minor"].Value);
+        this.Patch = int.Parse(match.Groups["patch"].Value);
+        this.OriginalString = version;
+    }
+
+    /// <summary>Version text</summary>
+    public string OriginalString { get; }
+
+    /// <summary>Major version</summary>
+    public int Major { get; }
+
+    /// <summary>Minor version</summary>
+    public int Minor { get; }
+
+    /// <summary>Patch version</summary>
+    public int Patch { get; }
+
+    /// <summary>Try to parse version text</summary>
+    /// <param name="text">Version text</param>
+    /// <param name="version">Instance of parse result</param>
+    /// <returns></returns>
+    public static bool TryParse(string text, [NotNullWhen(true)] out BookStackVersion? version)
+    {
+        // Although the analysis should be performed with no exceptions, since this is not a performance-oriented area, it should be a simple process and not be transmitted to the outside world.
+        try { version = new BookStackVersion(text); return true; }
+        catch { version = default; return false; }
+    }
+
+    /// <inheritdoc />
+    public int CompareTo(BookStackVersion? other)
+    {
+        if (other == null) return int.MaxValue;
+
+        var major = NumberComparer.Compare(this.Major, other.Major);
+        if (major != 0) return major;
+        var minor = NumberComparer.Compare(this.Minor, other.Minor);
+        if (minor != 0) return minor;
+        return NumberComparer.Compare(this.Patch, other.Patch);
+    }
+
+    /// <summary>An operator that compares the size of an instance.</summary>
+    public static bool operator <(BookStackVersion x, BookStackVersion y) => x.CompareTo(y) < 0;
+    /// <summary>An operator that compares the size of an instance.</summary>
+    public static bool operator >(BookStackVersion x, BookStackVersion y) => x.CompareTo(y) > 0;
+    /// <summary>An operator that compares the size of an instance.</summary>
+    public static bool operator <=(BookStackVersion x, BookStackVersion y) => x.CompareTo(y) <= 0;
+    /// <summary>An operator that compares the size of an instance.</summary>
+    public static bool operator >=(BookStackVersion x, BookStackVersion y) => x.CompareTo(y) >= 0;
+
+    private static readonly Regex VersionPattern = new(@"^\s*(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)\s*$");
+    private static readonly Comparer<int> NumberComparer = Comparer<int>.Default;
+
 }
