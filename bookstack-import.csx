@@ -225,6 +225,13 @@ ValueTask<TResult> scopeAction<TResult>(Func<ValueTask<TResult>> action) => acti
 
 async ValueTask<PageItem?> importPageAsync(ImportContext context, DirectoryInfo pageDir, PageMetadata pageMeta, CreatePageArgs baseArgs, Action<string>? notify = default)
 {
+    // Ignore the draft article.
+    if (pageMeta.draft)
+    {
+        notify?.Invoke($"Import skipped due to draft page.");
+        return null;
+    }
+
     // Generate page creation arguments.
     var createArgs = default(CreatePageArgs);
     if (pageMeta.editor == "markdown")
