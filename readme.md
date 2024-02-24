@@ -24,12 +24,14 @@ BookStack has a limit on the number of API requests per minute, but the script w
 These scripts only reproduce the contents of the book.  
 The following points should be carefully identified.  
 
-- Ownership, permissions, etc. are not restored upon import.
-    - The owner of the entity created by the import is the API key user.
-    - Permissions will be in the default state.
 - Only books, chapters, pages, attachments, and gallery images can be exported/imported.
     - Shelves do not export/import.
     - Comments do not export/import.
+- Ownership, permissions, etc. are restored on a name basis.
+    - No users or roles are created.
+    - Compare with already existing users and roles by name and restore only if uniquely identified.
+    - Optionally, this restoration can be disabled.
+    - If not restored, the owner is the API key user and permissions remain at default.
 - The article will not be corrected in any way.
     - Even if the article contains the address of the export source instance, for example, it will not be updated to the import destination address.
     - If necessary, manual corrections can be made to the exported data before importing.
