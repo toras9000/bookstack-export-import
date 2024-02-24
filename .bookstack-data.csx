@@ -10,14 +10,14 @@ record BookMetadata(
     long id, string name, string slug, string description, long? default_template_id,
     DateTime created_at, DateTime updated_at,
     User created_by, User updated_by, User owned_by,
-    ContentTag[]? tags, BookCover? cover
+    ContentTag[]? tags, BookCover? cover, ContentPermissionsItem permissions
 );
 
 record ChapterMetadata(
     long id, string name, string slug, string description, long priority,
     DateTime created_at, DateTime updated_at,
     User created_by, User updated_by, User owned_by,
-    ContentTag[]? tags
+    ContentTag[]? tags, ContentPermissionsItem permissions
 );
 
 record PageMetadata(
@@ -25,5 +25,5 @@ record PageMetadata(
     string editor, long revision_count, bool draft, bool template,
     DateTime created_at, DateTime updated_at,
     User created_by, User updated_by, User owned_by,
-    ContentTag[]? tags
+    ContentTag[]? tags, ContentPermissionsItem permissions
 );

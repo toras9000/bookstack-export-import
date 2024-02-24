@@ -1,3 +1,4 @@
+#r "nuget: System.Interactive.Async, 6.0.1"
 #r "nuget: Lestaly, 0.56.0"
 #load ".bookstack-api-helper.csx"
 #load ".bookstack-data.csx"
@@ -20,6 +21,10 @@ var settings = new
         // Whether or not to skip importing when a book with the same title exists.
         // This is only determined for books existing in the import destination instance. Even if there are multiple identical titles in the import data, they will not be skipped.
         SkipSameTitle = true,
+
+        // Whether to restore permissions or not
+        // If there is no user or role with the same name at the import destination, the restoration is ignored.
+        RestorePermissions = true,
     },
 
     BookStack = new
@@ -71,19 +76,35 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
     // Create context instance
     var context = new ImportContext(helper, importDataDir, signal.Token);
 
-    // If the setting is to run only on an empty instance, check for the existence of a book.
-    if (settings.Options.OnlyEmptyInstance)
+    // Obtain instance information
+    var instance = await scopeAction(async () =>
     {
-        var books = await context.Helper.Try(s => s.ListBooksAsync(new(count: 1), context.CancelToken));
-        if (0 < books.data.Length) throw new PavedMessageException("Cancelled due to the existence of a book in the instance to be imported.", PavedMessageKind.Warning);
-    }
+        // If the setting is to run only on an empty instance, check for the existence of a book.
+        if (settings.Options.OnlyEmptyInstance)
+        {
+            var books = await context.Helper.Try(s => s.ListBooksAsync(new(count: 1), context.CancelToken));
+            if (0 < books.data.Length) throw new PavedMessageException("Cancelled due to the existence of a book in the instance to be imported.", PavedMessageKind.Warning);
+        }
 
-    // When performing same title skipping, perform acquisition of all existing book titles.
-    var bookTitles = new HashSet<string>();
-    if (settings.Options.SkipSameTitle)
-    {
-        bookTitles = await getAllBookTitles(context);
-    }
+        // When performing same title skipping, perform acquisition of all existing book titles.
+        var bookTitles = default(HashSet<string>);
+        if (settings.Options.SkipSameTitle)
+        {
+            bookTitles = await context.Helper.EnumerateAllBooksAsync().Select(b => b.name).ToHashSetAsync();
+        }
+
+        // Retrieve user and role information for the import destination instance when restoring permissions.
+        var users = default(UserSummary[]);
+        var roles = default(RoleSummary[]);
+        if (settings.Options.RestorePermissions)
+        {
+            users = await context.Helper.EnumerateAllUsersAsync().ToArrayAsync();
+            roles = await context.Helper.EnumerateAllRolesAsync().ToArrayAsync();
+        }
+
+        return new ImportInstance(version, bookTitles ?? [], users ?? [], roles ?? []);
+
+    });
 
     // Enumeration options for single-level searches
     var oneLvEnum = new EnumerationOptions();
@@ -106,7 +127,7 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
         Console.WriteLine($"Importing book: {Chalk.Green[bookMeta.name]} ...");
 
         // Determine if it is subject to skipping by the same title.
-        if (settings.Options.SkipSameTitle && bookTitles.Contains(bookMeta.name))
+        if (instance.BookTitles?.Contains(bookMeta.name) == true)
         {
             Console.WriteLine($"  Skip due to the existence of the same title book.");
             continue;
@@ -122,6 +143,12 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
         // Create book
         var book = await context.Helper.Try(s => s.CreateBookAsync(new(bookMeta.name, description_html: bookMeta.description, tags: bookMeta.tags), bookCoverFile?.FullName, cancelToken: context.CancelToken));
 
+        // Restore book permissions
+        if (settings.Options.RestorePermissions && bookMeta.permissions != null)
+        {
+            await restorePermissionsAsync(context, instance, "book", book.id, bookMeta.permissions, info => Console.WriteLine($"  {Chalk.Yellow[info]}"));
+        }
+
         // Search and import content directories.
         foreach (var contentDir in bookDir.EnumerateDirectories("*.*", oneLvEnum).OrderBy(d => d.Name))
         {
@@ -134,7 +161,15 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
 
                 // Create a page in the book.
                 Console.WriteLine($"  Page: {Chalk.Green[pageMeta.name]} ...");
-                var page = await importPageAsync(context, contentDir, pageMeta, new("", book_id: book.id));
+                var page = await importPageAsync(context, contentDir, pageMeta, new("", book_id: book.id), info => Console.WriteLine($"    {Chalk.Yellow[info]}"));
+                if (page != null)
+                {
+                    // Restore page permissions
+                    if (settings.Options.RestorePermissions && pageMeta.permissions != null)
+                    {
+                        await restorePermissionsAsync(context, instance, "page", page.id, pageMeta.permissions, info => Console.WriteLine($"    {Chalk.Yellow[info]}"));
+                    }
+                }
             }
             else if (contentDir.RelativeFile("chapter-meta.json").OmitNotExists() is FileInfo chapterMetaFile)
             {
@@ -145,6 +180,12 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
                 // Create chapter.
                 Console.WriteLine($"  Chapter: {Chalk.Green[chapterMeta.name]} ...");
                 var chapter = await context.Helper.Try(c => c.CreateChapterAsync(new(book.id, chapterMeta.name, description_html: chapterMeta.description, tags: chapterMeta.tags), context.CancelToken));
+
+                // Restore chapter permissions
+                if (settings.Options.RestorePermissions && chapterMeta.permissions != null)
+                {
+                    await restorePermissionsAsync(context, instance, "chapter", chapter.id, chapterMeta.permissions, info => Console.WriteLine($"    {Chalk.Yellow[info]}"));
+                }
 
                 // Importing pages in chapter
                 foreach (var pageDir in contentDir.EnumerateDirectories("*P.*", oneLvEnum).OrderBy(d => d.Name))
@@ -159,7 +200,15 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
 
                     // Create pages in chapter.
                     Console.WriteLine($"    Page: {Chalk.Green[pageMeta.name]} ...");
-                    var page = await importPageAsync(context, pageDir, pageMeta, new("", chapter_id: chapter.id));
+                    var page = await importPageAsync(context, pageDir, pageMeta, new("", chapter_id: chapter.id), info => Console.WriteLine($"      {Chalk.Yellow[info]}"));
+                    if (page != null)
+                    {
+                        // Restore page permissions
+                        if (settings.Options.RestorePermissions && pageMeta.permissions != null)
+                        {
+                            await restorePermissionsAsync(context, instance, "page", page.id, pageMeta.permissions, info => Console.WriteLine($"      {Chalk.Yellow[info]}"));
+                        }
+                    }
                 }
             }
         }
@@ -170,30 +219,11 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
 });
 
 record ImportContext(BookStackClientHelper Helper, DirectoryInfo ImportDir, CancellationToken CancelToken);
+record ImportInstance(BookStackVersion Version, IReadOnlySet<string> BookTitles, IReadOnlyList<UserSummary> Users, IReadOnlyList<RoleSummary> Roles);
 
-async ValueTask<HashSet<string>> getAllBookTitles(ImportContext context)
-{
-    var offset = 0;
-    var titles = new HashSet<string>();
-    while (true)
-    {
-        var books = await context.Helper.Try(c => c.ListBooksAsync(new(offset, count: 500), context.CancelToken));
-        foreach (var book in books.data)
-        {
-            titles.Add(book.name);
-        }
+ValueTask<TResult> scopeAction<TResult>(Func<ValueTask<TResult>> action) => action();
 
-        // Update search information and determine end of search.
-        offset += books.data.Length;
-        var finished = (books.data.Length <= 0) || (books.total <= offset);
-        if (finished) break;
-    }
-
-    return titles;
-}
-
-//
-async ValueTask<PageItem?> importPageAsync(ImportContext context, DirectoryInfo pageDir, PageMetadata pageMeta, CreatePageArgs baseArgs)
+async ValueTask<PageItem?> importPageAsync(ImportContext context, DirectoryInfo pageDir, PageMetadata pageMeta, CreatePageArgs baseArgs, Action<string>? notify = default)
 {
     // Generate page creation arguments.
     var createArgs = default(CreatePageArgs);
@@ -201,15 +231,19 @@ async ValueTask<PageItem?> importPageAsync(ImportContext context, DirectoryInfo 
     {
         // If the page content is in Markdown format.
         var contentFile = pageDir.RelativeFile("page-content.md");
-        if (!contentFile.Exists) return null;
-        createArgs = baseArgs with { name = pageMeta.name, tags = pageMeta.tags, markdown = await contentFile.ReadAllTextAsync(context.CancelToken), };
+        if (!contentFile.Exists) { notify?.Invoke($"Import skipped due to missing page content file '{contentFile.Name}'."); return null; }
+        var content = await contentFile.ReadAllTextAsync(context.CancelToken);
+        if (content.IsWhite()) { notify?.Invoke($"Import skipped due to empty page content."); return null; }
+        createArgs = baseArgs with { name = pageMeta.name, tags = pageMeta.tags, markdown = content, };
     }
     else
     {
         // If the page content is in HTML format
         var contentFile = pageDir.RelativeFile("page-content.html");
-        if (!contentFile.Exists) return null;
-        createArgs = baseArgs with { name = pageMeta.name, tags = pageMeta.tags, html = await contentFile.ReadAllTextAsync(context.CancelToken), };
+        if (!contentFile.Exists) { notify?.Invoke($"Import skipped due to missing page content file '{contentFile.Name}'."); return null; }
+        var content = await contentFile.ReadAllTextAsync(context.CancelToken);
+        if (content.IsWhite()) { notify?.Invoke($"Import skipped due to empty page content."); return null; }
+        createArgs = baseArgs with { name = pageMeta.name, tags = pageMeta.tags, html = content, };
     }
 
     // Create page
@@ -262,7 +296,11 @@ async ValueTask<PageItem?> importPageAsync(ImportContext context, DirectoryInfo 
 
             // Identify the name of the image file to be imported.
             var imageFile = imageMetaFile.RelativeFile($"{imageMeta.id:D4}I.{Path.GetFileName(imageMeta.path)}");
-            if (!imageFile.Exists) continue;
+            if (!imageFile.Exists)
+            {
+                notify?.Invoke($"Import skipped due to missing image file '{imageFile.Name}'.");
+                continue;
+            }
 
             // Create an image
             var image = await context.Helper.Try(s => s.CreateImageAsync(new(page.id, imageMeta.type, imageMeta.name), imageFile.FullName, cancelToken: context.CancelToken));
@@ -271,4 +309,34 @@ async ValueTask<PageItem?> importPageAsync(ImportContext context, DirectoryInfo 
     }
 
     return page;
+}
+
+async ValueTask<ContentPermissionsItem> restorePermissionsAsync(ImportContext context, ImportInstance instance, string type, long id, ContentPermissionsItem permissions, Action<string>? notify = default)
+{
+    var impOwner = instance.Users.Where(u => u.name == permissions.owner.name).ToArray();
+    var impOwnerId = default(long?);
+    if (impOwner?.Length == 1)
+    {
+        impOwnerId = impOwner[0].id;
+    }
+    else
+    {
+        notify?.Invoke($"Skipping owner restore because user '{permissions.owner.name}' cannot be identified.");
+    }
+
+    var rolePerms = new List<RolePermission>();
+    foreach (var perm in permissions.role_permissions)
+    {
+        var impRole = instance.Roles.Where(r => r.display_name == perm.role.display_name).ToArray();
+        if (impOwner?.Length == 1)
+        {
+            rolePerms.Add(new(impRole[0].id, perm.view, perm.create, perm.update, perm.delete));
+        }
+        else
+        {
+            notify?.Invoke($"Skipping permission restore because role '{perm.role.display_name}' cannot be identified.");
+        }
+    }
+
+    return await context.Helper.Try(s => s.UpdateContentPermissionsAsync(type, id, new(impOwnerId, rolePerms.ToArray(), permissions.fallback_permissions), cancelToken: context.CancelToken));
 }

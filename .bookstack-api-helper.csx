@@ -27,7 +27,7 @@ public class BookStackClientHelper : IDisposable
     {
         this.Client = new BookStackClient(apiEndpoint, apiKey.Token, apiKey.Secret);
         this.Http = new HttpClient();
-        this.cancelToken = cancelToken;
+        this.CancelToken = cancelToken;
         this.msgWriter = output ?? Console.Out;
     }
 
@@ -36,6 +36,9 @@ public class BookStackClientHelper : IDisposable
 
     /// <summary>Http client instance</summary>
     public HttpClient Http { get; }
+
+    /// <summary>cancel token</summary>
+    public CancellationToken CancelToken { get; }
 
     /// <summary>Helper method to retry at API request limit</summary>
     /// <param name="accessor">API request processing</param>
@@ -54,7 +57,7 @@ public class BookStackClientHelper : IDisposable
                 this.msgWriter.WriteLine(Chalk.Yellow[$"Caught in API call rate limitation. Rate limit: {ex.RequestsPerMin} [per minute], {ex.RetryAfter} seconds to lift the limit."]);
                 this.msgWriter.WriteLine(Chalk.Yellow[$"It will automatically retry after a period of time has elapsed."]);
                 this.msgWriter.WriteLine(Chalk.Yellow[$"[Waiting...]"]);
-                await Task.Delay(500 + (int)(ex.RetryAfter * 1000), this.cancelToken);
+                await Task.Delay(500 + (int)(ex.RetryAfter * 1000), this.CancelToken);
                 this.msgWriter.WriteLine();
             }
         }
@@ -92,14 +95,14 @@ public class BookStackClientHelper : IDisposable
         // This may be difficult since the API appears to be aimed at automating tasks rather than for external tools.
 
         // Here, as an alternative method, the search API is used to search for the user's own items.
-        var found = await this.Try(c => c.SearchAsync(new("{owned_by:me}", count: 1), this.cancelToken));
+        var found = await this.Try(c => c.SearchAsync(new("{owned_by:me}", count: 1), this.CancelToken));
         var item = found.data.FirstOrDefault();
         var owner = item switch
         {
-            SearchContentBook => (await this.Try(c => c.ReadBookAsync(item.id, this.cancelToken))).owned_by,
-            SearchContentChapter => (await this.Try(c => c.ReadChapterAsync(item.id, this.cancelToken))).owned_by,
-            SearchContentPage => (await this.Try(c => c.ReadPageAsync(item.id, this.cancelToken))).owned_by,
-            SearchContentShelf => (await this.Try(c => c.ReadShelfAsync(item.id, this.cancelToken))).owned_by,
+            SearchContentBook => (await this.Try(c => c.ReadBookAsync(item.id, this.CancelToken))).owned_by,
+            SearchContentChapter => (await this.Try(c => c.ReadChapterAsync(item.id, this.CancelToken))).owned_by,
+            SearchContentPage => (await this.Try(c => c.ReadPageAsync(item.id, this.CancelToken))).owned_by,
+            SearchContentShelf => (await this.Try(c => c.ReadShelfAsync(item.id, this.CancelToken))).owned_by,
             _ => new User(0, "Unknownw", "Unknown"),
         };
 
@@ -113,8 +116,6 @@ public class BookStackClientHelper : IDisposable
         this.Http.Dispose();
     }
 
-    /// <summary>cancel token</summary>
-    private readonly CancellationToken cancelToken;
     /// <summary>message output writer</summary>
     private readonly TextWriter msgWriter;
 }
@@ -183,4 +184,58 @@ public record BookStackVersion : IComparable<BookStackVersion>
     private static readonly Regex VersionPattern = new(@"^\s*(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)\s*$");
     private static readonly Comparer<int> NumberComparer = Comparer<int>.Default;
 
+}
+
+
+public static async IAsyncEnumerable<BookSummary> EnumerateAllBooksAsync(this BookStackClientHelper self)
+{
+    var offset = 0;
+    while (true)
+    {
+        var books = await self.Try(c => c.ListBooksAsync(new(offset, count: 500), self.CancelToken));
+        foreach (var book in books.data)
+        {
+            yield return book;
+        }
+
+        offset += books.data.Length;
+        var finished = (books.data.Length <= 0) || (books.total <= offset);
+        if (finished) break;
+    }
+}
+
+public static async IAsyncEnumerable<UserSummary> EnumerateAllUsersAsync(this BookStackClientHelper self)
+{
+    var offset = 0;
+    var allUsers = new List<UserSummary>();
+    while (true)
+    {
+        var users = await self.Try(c => c.ListUsersAsync(new(offset, count: 500), self.CancelToken));
+        foreach (var user in users.data)
+        {
+            yield return user;
+        }
+
+        offset += users.data.Length;
+        var finished = (users.data.Length <= 0) || (users.total <= offset);
+        if (finished) break;
+    }
+}
+
+public static async IAsyncEnumerable<RoleSummary> EnumerateAllRolesAsync(this BookStackClientHelper self)
+{
+    var offset = 0;
+    var allRoles = new List<RoleSummary>();
+    while (true)
+    {
+        var roles = await self.Try(c => c.ListRolesAsync(new(offset, count: 500), self.CancelToken));
+        foreach (var role in roles.data)
+        {
+            yield return role;
+        }
+
+        offset += roles.data.Length;
+        var finished = (roles.data.Length <= 0) || (roles.total <= offset);
+        if (finished) break;
+    }
 }

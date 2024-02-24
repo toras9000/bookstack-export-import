@@ -87,10 +87,11 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
 
             // Read book information
             var book = await context.Helper.Try(c => c.ReadBookAsync(summary.id, context.CancelToken));
+            var bookPerms = await context.Helper.Try(c => c.ReadBookPermissionsAsync(summary.id, context.CancelToken));
 
             // Save book information
             var bookDir = exportDir.RelativeDirectory($"{book.id:D4}B.{book.name.ToFileName()}").WithCreate();
-            var bookMeta = createMetadata(book);
+            var bookMeta = createMetadata(book, bookPerms);
             await bookDir.RelativeFile("book-meta.json").WriteJsonAsync(bookMeta, context.JsonOptions);
 
             // Download and save the book cover, if available.
@@ -110,10 +111,11 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
                     // Read chapter information
                     Console.WriteLine($"  Chapter: {Chalk.Green[chapterContent.name]} ...");
                     var chapter = await context.Helper.Try(c => c.ReadChapterAsync(chapterContent.id, context.CancelToken));
+                    var chapterPerms = await context.Helper.Try(c => c.ReadChapterPermissionsAsync(chapterContent.id, context.CancelToken));
 
                     // Save chapter information
                     var chapterDir = bookDir.RelativeDirectory($"{chapter.priority:D4}C.{chapter.name.ToFileName()}").WithCreate();
-                    var chapterMeta = createMetadata(chapter);
+                    var chapterMeta = createMetadata(chapter, chapterPerms);
                     await chapterDir.RelativeFile("chapter-meta.json").WriteJsonAsync(chapterMeta, context.JsonOptions);
 
                     // Save each page in a chapter
@@ -144,39 +146,40 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
 
 record ExportContext(BookStackClientHelper Helper, JsonSerializerOptions JsonOptions, DirectoryInfo ExportDir, CancellationToken CancelToken);
 
-BookMetadata createMetadata(ReadBookResult book)
+BookMetadata createMetadata(ReadBookResult book, ContentPermissionsItem permissions)
     => new(
         book.id, book.name, book.slug, book.description_html, book.default_template_id,
         book.created_at, book.updated_at,
         book.created_by, book.updated_by, book.owned_by,
-        book.tags, book.cover
+        book.tags, book.cover, permissions
     );
 
-ChapterMetadata createMetadata(ReadChapterResult chapter)
+ChapterMetadata createMetadata(ReadChapterResult chapter, ContentPermissionsItem permissions)
     => new(
         chapter.id, chapter.name, chapter.slug, chapter.description_html, chapter.priority,
         chapter.created_at, chapter.updated_at,
         chapter.created_by, chapter.updated_by, chapter.owned_by,
-        chapter.tags
+        chapter.tags, permissions
     );
 
-PageMetadata createMetadata(ReadPageResult page)
+PageMetadata createMetadata(ReadPageResult page, ContentPermissionsItem permissions)
     => new(
         page.id, page.name, page.slug, page.priority,
         page.editor, page.revision_count, page.draft, page.template,
         page.created_at, page.updated_at,
         page.created_by, page.updated_by, page.owned_by,
-        page.tags
+        page.tags, permissions
     );
 
 async ValueTask exportPageAsync(ExportContext context, DirectoryInfo baseDir, long pageId)
 {
     // Read page information
     var page = await context.Helper.Try(c => c.ReadPageAsync(pageId, context.CancelToken));
+    var pagePerms = await context.Helper.Try(c => c.ReadPagePermissionsAsync(pageId, context.CancelToken));
 
     // Save page information
     var pageDir = baseDir.RelativeDirectory($"{page.priority:D4}P.{page.name.ToFileName()}").WithCreate();
-    var pageMeta = createMetadata(page);
+    var pageMeta = createMetadata(page, pagePerms);
     await pageDir.RelativeFile("page-meta.json").WriteJsonAsync(pageMeta, context.JsonOptions);
 
     // Save the page content corresponding to the editor.
