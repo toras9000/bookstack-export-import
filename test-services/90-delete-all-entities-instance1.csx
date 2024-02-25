@@ -1,5 +1,5 @@
 #r "nuget: Lestaly, 0.56.0"
-#load "../.bookstack-api-helper.csx"
+#load "../modules/.bookstack-api-helper.csx"
 #nullable enable
 using System.Net.Http;
 using System.Threading;

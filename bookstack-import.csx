@@ -1,7 +1,7 @@
 #r "nuget: System.Interactive.Async, 6.0.1"
 #r "nuget: Lestaly, 0.56.0"
-#load ".bookstack-api-helper.csx"
-#load ".bookstack-data.csx"
+#load "modules/.bookstack-api-helper.csx"
+#load "modules/.bookstack-data.csx"
 #nullable enable
 using System.Net.Http;
 using System.Text.Json;
