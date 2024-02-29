@@ -50,7 +50,7 @@ services:
       - MYSQL_PASSWORD=bookstack_pass
 
   app1:
-    image: lscr.io/linuxserver/bookstack:version-v23.12.2
+    image: lscr.io/linuxserver/bookstack:version-v24.02
     restart: unless-stopped
     depends_on:
       db2:
@@ -86,7 +86,7 @@ services:
       - CUSTOM_TEST_TOKEN_SECRET=88889999aaaabbbbccccddddeeeeffff
 
   app2:
-    image: lscr.io/linuxserver/bookstack:version-v23.12.2
+    image: lscr.io/linuxserver/bookstack:version-v24.02
     restart: unless-stopped
     depends_on:
       app1:

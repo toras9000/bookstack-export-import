@@ -1,4 +1,4 @@
-#r "nuget: BookStackApiClient, 23.12.1-lib.1"
+#r "nuget: BookStackApiClient, 24.2.0-lib.1"
 #r "nuget: Kokuban, 0.2.0"
 #nullable enable
 using System.Threading;
