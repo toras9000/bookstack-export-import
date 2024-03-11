@@ -10,7 +10,7 @@ services:
         aliases:
           - bookstack-db1-container
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "--host=localhost", "--user=root"]
+      test: mysqladmin ping --host=localhost --user=$${MYSQL_USER} || exit 1
       interval: 15s
       timeout: 10s
       retries: 10
@@ -35,7 +35,7 @@ services:
         aliases:
           - bookstack-db2-container
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "--host=localhost", "--user=root"]
+      test: mysqladmin ping --host=localhost --user=$${MYSQL_USER} || exit 1
       interval: 15s
       timeout: 10s
       retries: 10
@@ -60,7 +60,7 @@ services:
         aliases:
           - bookstack-app1-container
     healthcheck:
-      test: ["CMD", "curl", "http://localhost"]
+      test: curl -f http://localhost || exit 1
       interval: 30s
       timeout: 10s
       retries: 40
@@ -96,7 +96,7 @@ services:
         aliases:
           - bookstack-app2-container
     healthcheck:
-      test: ["CMD", "curl", "http://localhost"]
+      test: curl -f http://localhost || exit 1
       interval: 30s
       timeout: 10s
       retries: 40
