@@ -131,9 +131,12 @@ public record BookStackVersion : IComparable<BookStackVersion>
     {
         var match = VersionPattern.Match(version);
         if (!match.Success) throw new ArgumentException("Illegal");
-        this.Major = int.Parse(match.Groups["major"].Value);
-        this.Minor = int.Parse(match.Groups["minor"].Value);
-        this.Patch = int.Parse(match.Groups["patch"].Value);
+        var major = match.Groups["major"];
+        var minor = match.Groups["minor"];
+        var patch = match.Groups["patch"];
+        this.Major = int.Parse(major.Value);
+        this.Minor = int.Parse(minor.Value);
+        this.Patch = patch.Success ? int.Parse(patch.Value) : 0;
         this.OriginalString = version;
     }
 
@@ -181,7 +184,7 @@ public record BookStackVersion : IComparable<BookStackVersion>
     /// <summary>An operator that compares the size of an instance.</summary>
     public static bool operator >=(BookStackVersion x, BookStackVersion y) => x.CompareTo(y) >= 0;
 
-    private static readonly Regex VersionPattern = new(@"^\s*(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)\s*$");
+    private static readonly Regex VersionPattern = new(@"^\s*(?<major>\d+)\.(?<minor>\d+)(?:\.(?<patch>\d+))?\s*$");
     private static readonly Comparer<int> NumberComparer = Comparer<int>.Default;
 
 }
