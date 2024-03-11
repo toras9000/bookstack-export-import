@@ -1,5 +1,5 @@
 #r "nuget: System.Interactive.Async, 6.0.1"
-#r "nuget: Lestaly, 0.56.0"
+#r "nuget: Lestaly, 0.57.0"
 #load "modules/.bookstack-api-helper.csx"
 #load "modules/.bookstack-data.csx"
 #nullable enable
