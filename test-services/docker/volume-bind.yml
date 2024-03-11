@@ -1,0 +1,16 @@
+services:
+  db1:
+    volumes:
+      - ./volumes/service1/db:/var/lib/mysql
+
+  db2:
+    volumes:
+      - ./volumes/service2/db:/var/lib/mysql
+
+  app1:
+    volumes:
+      - ./volumes/service1/app:/config
+
+  app2:
+    volumes:
+      - ./volumes/service2/app:/config
