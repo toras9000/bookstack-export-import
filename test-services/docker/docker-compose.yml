@@ -11,33 +11,10 @@ services:
           - bookstack-db1-container
     healthcheck:
       test: mysqladmin ping --host=localhost --user=$${MYSQL_USER} || exit 1
+      start_period: 10s
       interval: 15s
       timeout: 10s
-      retries: 10
-      start_period: 60s
-    environment:
-      - TZ=Asia/Tokyo
-      - MYSQL_ROOT_PASSWORD=bookstack_rootpass
-      - MYSQL_DATABASE=bookstack_store
-      - MYSQL_USER=bookstack_user
-      - MYSQL_PASSWORD=bookstack_pass
-
-  db2:
-    image: mysql:8
-    restart: unless-stopped
-    depends_on:
-      db1:
-        condition: service_healthy
-    networks:
-      default:
-        aliases:
-          - bookstack-db2-container
-    healthcheck:
-      test: mysqladmin ping --host=localhost --user=$${MYSQL_USER} || exit 1
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
+      retries: 16
     environment:
       - TZ=Asia/Tokyo
       - MYSQL_ROOT_PASSWORD=bookstack_rootpass
@@ -46,7 +23,7 @@ services:
       - MYSQL_PASSWORD=bookstack_pass
 
   app1:
-    image: lscr.io/linuxserver/bookstack:version-v24.02.1
+    image: lscr.io/linuxserver/bookstack:version-v24.02.2
     restart: unless-stopped
     depends_on:
       db2:
@@ -57,10 +34,10 @@ services:
           - bookstack-app1-container
     healthcheck:
       test: curl -f http://localhost || exit 1
-      interval: 30s
+      start_period: 10s
+      interval: 15s
       timeout: 10s
-      retries: 40
-      start_period: 30s
+      retries: 60
     ports:
       - "9971:80"
     volumes:
@@ -75,13 +52,36 @@ services:
       - DB_DATABASE=bookstack_store
       - DB_USER=bookstack_user
       - DB_PASS=bookstack_pass
-      - CUSTOM_APP_THEME=my-theme
-      - CUSTOM_API_REQUESTS_PER_MIN=180
+      - APP_THEME=my-theme
+      - API_REQUESTS_PER_MIN=180
       - CUSTOM_TEST_TOKEN_ID=00001111222233334444555566667777
       - CUSTOM_TEST_TOKEN_SECRET=88889999aaaabbbbccccddddeeeeffff
 
+  db2:
+    image: mysql:8
+    restart: unless-stopped
+    depends_on:
+      db1:
+        condition: service_healthy
+    networks:
+      default:
+        aliases:
+          - bookstack-db2-container
+    healthcheck:
+      test: mysqladmin ping --host=localhost --user=$${MYSQL_USER} || exit 1
+      start_period: 10s
+      interval: 15s
+      timeout: 10s
+      retries: 16
+    environment:
+      - TZ=Asia/Tokyo
+      - MYSQL_ROOT_PASSWORD=bookstack_rootpass
+      - MYSQL_DATABASE=bookstack_store
+      - MYSQL_USER=bookstack_user
+      - MYSQL_PASSWORD=bookstack_pass
+
   app2:
-    image: lscr.io/linuxserver/bookstack:version-v24.02.1
+    image: lscr.io/linuxserver/bookstack:version-v24.02.2
     restart: unless-stopped
     depends_on:
       app1:
@@ -92,10 +92,10 @@ services:
           - bookstack-app2-container
     healthcheck:
       test: curl -f http://localhost || exit 1
-      interval: 30s
+      start_period: 10s
+      interval: 15s
       timeout: 10s
-      retries: 40
-      start_period: 30s
+      retries: 60
     ports:
       - "9972:80"
     volumes:
@@ -110,7 +110,7 @@ services:
       - DB_DATABASE=bookstack_store
       - DB_USER=bookstack_user
       - DB_PASS=bookstack_pass
-      - CUSTOM_APP_THEME=my-theme
-      - CUSTOM_API_REQUESTS_PER_MIN=180
+      - APP_THEME=my-theme
+      - API_REQUESTS_PER_MIN=180
       - CUSTOM_TEST_TOKEN_ID=444455556666777788889999aaaabbbb
       - CUSTOM_TEST_TOKEN_SECRET=ccccddddeeeeffff0000111122223333
