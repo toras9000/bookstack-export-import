@@ -19,11 +19,12 @@ await Paved.RunAsync(async () =>
     var apiSecret = "88889999aaaabbbbccccddddeeeeffff";
 
     // Number of objects to be generated.
-    var genBooks = new { min = 2, max = 5, };
+    var genBooks = new { min = 3, max = 6, };
     var genContents = new { min = 3, max = 6, };
     var genSubPages = new { min = 2, max = 4, };
     var genPageImages = new { min = 2, max = 3, };
     var genPageAttaches = new { min = 2, max = 3, };
+    var genShelves = 3;
 
     // Force option
     var forceGenerate = false;
@@ -51,6 +52,9 @@ await Paved.RunAsync(async () =>
         }
     }
 
+    // List to group books. Create shelves for later.
+    var bookBinders = Enumerable.Range(0, genShelves).Select(_ => new List<long>()).ToArray();
+
     // Create a dummy objects.
     var bookCount = Random.Shared.Next(genBooks.min, genBooks.max + 1);
     for (var b = 0; b < bookCount; b++)
@@ -59,6 +63,10 @@ await Paved.RunAsync(async () =>
         Console.WriteLine($"Create dummy Book {bookNum} ...");
         var bookCover = ContentGenerator.CreateTextImage($"Book {bookNum} Cover");
         var book = await helper.Try(s => s.CreateBookAsync(new($"Book {bookNum}", $"Generated {DateTime.Now:yyyy/MM/dd HH:mm:ss.fff}"), bookCover, $"cover.png", cancelToken: signal.Token));
+
+        var binder = bookBinders.ElementAtOrDefault(Random.Shared.Next(bookBinders.Length + 1));    // Include outliers.
+        binder?.Add(book.id);
+
         var contentCount = Random.Shared.Next(genContents.min, genContents.max + 1);
         for (var c = 0; c < contentCount; c++)
         {
@@ -124,6 +132,14 @@ await Paved.RunAsync(async () =>
             }
 
         }
+    }
+
+    // Create shelves
+    foreach (var binder in bookBinders.Select((books, idx) => (books, num: 1 + idx)))
+    {
+        var imageLabel = $"Shelf-{binder.num}";
+        var imageBin = ContentGenerator.CreateTextImage(imageLabel);
+        await helper.Try(s => s.CreateShelfAsync(new($"Shelf {binder.num}", $"Generated {DateTime.Now:yyyy/MM/dd HH:mm:ss.fff}", books: binder.books), imageBin, $"{imageLabel}.png", cancelToken: signal.Token));
     }
 
     Console.WriteLine($"Completed");

@@ -127,11 +127,46 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
         }
     }
 
+    // Shelf information storing directory
+    var shelvesDir = exportDir.RelativeDirectory("shelves");
+
+    // Retrieve information for each shelf
+    await foreach (var summary in context.Helper.EnumerateAllShelvesAsync())
+    {
+        // Indicate the status.
+        Console.WriteLine($"Exporting shelf: {Chalk.Green[summary.name]} ...");
+
+        // Read shelf information
+        var shelf = await context.Helper.Try(c => c.ReadShelfAsync(summary.id, context.CancelToken));
+        var shelfPerms = await context.Helper.Try(c => c.ReadShelfPermissionsAsync(summary.id, context.CancelToken));
+
+        // Save shelf information
+        var shelfMeta = createMetadata(shelf, shelfPerms);
+        await shelvesDir.RelativeFile($"{shelf.id:D4}S-meta.json").WithDirectoryCreate().WriteJsonAsync(shelfMeta, context.JsonOptions);
+
+        // Download and save the shelf cover, if available.
+        if (shelf.cover != null && shelf.cover.url.IsNotWhite())
+        {
+            var coverUrl = new Uri(shelf.cover.url);
+            var coverFile = shelvesDir.RelativeFile($"{shelf.id:D4}S-cover{Path.GetExtension(coverUrl.AbsolutePath)}");
+            await context.Helper.Http.GetFileAsync(coverUrl, coverFile.FullName, context.CancelToken);
+        }
+    }
+
     Console.WriteLine($"Completed");
 
 });
 
 record ExportContext(BookStackClientHelper Helper, JsonSerializerOptions JsonOptions, DirectoryInfo ExportDir, CancellationToken CancelToken);
+
+ShelfMetadata createMetadata(ReadShelfResult shelf, ContentPermissionsItem permissions)
+    => new(
+        shelf.id, shelf.name, shelf.slug, shelf.description_html,
+        shelf.books.Select(b => b.id).ToArray(),
+        shelf.created_at, shelf.updated_at,
+        shelf.created_by, shelf.updated_by, shelf.owned_by,
+        shelf.tags, shelf.cover, permissions
+    );
 
 BookMetadata createMetadata(ReadBookResult book, ContentPermissionsItem permissions)
     => new(

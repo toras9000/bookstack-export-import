@@ -86,11 +86,14 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
             if (0 < books.data.Length) throw new PavedMessageException("Cancelled due to the existence of a book in the instance to be imported.", PavedMessageKind.Warning);
         }
 
+        // Retrieve all shelf information.
+        var shelves = await context.Helper.EnumerateAllShelvesAsync().ToArrayAsync(context.CancelToken);
+
         // When performing same title skipping, perform acquisition of all existing book titles.
         var bookTitles = default(HashSet<string>);
         if (settings.Options.SkipSameTitle)
         {
-            bookTitles = await context.Helper.EnumerateAllBooksAsync().Select(b => b.name).ToHashSetAsync();
+            bookTitles = await context.Helper.EnumerateAllBooksAsync().Select(b => b.name).ToHashSetAsync(context.CancelToken);
         }
 
         // Retrieve user and role information for the import destination instance when restoring permissions.
@@ -98,11 +101,11 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
         var roles = default(RoleSummary[]);
         if (settings.Options.RestorePermissions)
         {
-            users = await context.Helper.EnumerateAllUsersAsync().ToArrayAsync();
-            roles = await context.Helper.EnumerateAllRolesAsync().ToArrayAsync();
+            users = await context.Helper.EnumerateAllUsersAsync().ToArrayAsync(context.CancelToken);
+            roles = await context.Helper.EnumerateAllRolesAsync().ToArrayAsync(context.CancelToken);
         }
 
-        return new ImportInstance(version, bookTitles ?? [], users ?? [], roles ?? []);
+        return new ImportInstance(version, shelves, bookTitles ?? [], users ?? [], roles ?? []);
 
     });
 
@@ -113,6 +116,20 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
     oneLvEnum.MatchCasing = MatchCasing.PlatformDefault;
     oneLvEnum.ReturnSpecialDirectories = false;
     oneLvEnum.IgnoreInaccessible = true;
+
+    // Read import shelves info
+    var importShelves = new List<ShelfMapInfo>();
+    var shelvesDir = context.ImportDir.RelativeDirectory("shelves");
+    if (shelvesDir.Exists)
+    {
+        foreach (var shelfMetaFile in shelvesDir.EnumerateFiles("*S-meta.json", oneLvEnum) ?? [])
+        {
+            var shelfMeta = await shelfMetaFile.ReadJsonAsync<ShelfMetadata>(context.CancelToken);
+            if (shelfMeta == null) continue;
+            var shelfCover = shelvesDir.RelativeFile($"{shelfMeta.id:D4}S-cover{Path.GetExtension(shelfMeta.cover?.url)}").OmitNotExists();
+            importShelves.Add(new(new(shelfMeta, shelfCover), shelfMeta.books.ToHashSet(), new()));
+        }
+    }
 
     // Enumerate the directory of book information to be imported
     foreach (var bookDir in context.ImportDir.EnumerateDirectories("*B.*", oneLvEnum))
@@ -212,6 +229,38 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
                 }
             }
         }
+
+        // Corresponding shelves to be imported.
+        var targetShelf = importShelves.FirstOrDefault(s => s.SourceBooks.Contains(book.id));
+        targetShelf?.ImportedBooks.Add(book.id);
+    }
+
+    // Shelf Import
+    foreach (var shelf in importShelves)
+    {
+        var meta = shelf.Info.Meta;
+        var existShelf = instance.Shelves.FirstOrDefault(s => s.name == meta.name);
+        if (existShelf == null)
+        {
+            // If there is no shelf with the same name, create one and make the book belong to it.
+            var args = new CreateShelfArgs(meta.name, description_html: meta.description, tags: meta.tags, books: shelf.ImportedBooks);
+            var imgPath = shelf.Info.Cover?.FullName;
+            var imgName = Path.GetFileName(meta.cover?.url);
+            await context.Helper.Try(s => s.CreateShelfAsync(args, imgPath, imgName, cancelToken: context.CancelToken));
+
+            // Restore book permissions
+            if (settings.Options.RestorePermissions && meta.permissions != null)
+            {
+                await restorePermissionsAsync(context, instance, "bookshelf", meta.id, meta.permissions, info => Console.WriteLine($"  {Chalk.Yellow[info]}"));
+            }
+        }
+        else
+        {
+            // If there is a shelf with the same name, let the book belong only.
+            var currentShelf = await context.Helper.Try(s => s.ReadShelfAsync(existShelf.id, context.CancelToken));
+            var newBooks = currentShelf.books.Select(b => b.id).Concat(meta.books).ToArray();
+            await context.Helper.Try(s => s.UpdateShelfAsync(existShelf.id, new(books: newBooks), cancelToken: context.CancelToken));
+        }
     }
 
     Console.WriteLine($"Completed");
@@ -219,7 +268,9 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
 });
 
 record ImportContext(BookStackClientHelper Helper, DirectoryInfo ImportDir, CancellationToken CancelToken);
-record ImportInstance(BookStackVersion Version, IReadOnlySet<string> BookTitles, IReadOnlyList<UserSummary> Users, IReadOnlyList<RoleSummary> Roles);
+record ImportInstance(BookStackVersion Version, IReadOnlyList<ShelfSummary> Shelves, IReadOnlySet<string> BookTitles, IReadOnlyList<UserSummary> Users, IReadOnlyList<RoleSummary> Roles);
+record ImportShelfInfo(ShelfMetadata Meta, FileInfo? Cover);
+record ShelfMapInfo(ImportShelfInfo Info, IReadOnlySet<long> SourceBooks, List<long> ImportedBooks);
 
 ValueTask<TResult> scopeAction<TResult>(Func<ValueTask<TResult>> action) => action();
 

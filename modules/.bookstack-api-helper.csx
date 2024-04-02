@@ -58,7 +58,6 @@ public class BookStackClientHelper : IDisposable
                 this.msgWriter.WriteLine(Chalk.Yellow[$"It will automatically retry after a period of time has elapsed."]);
                 this.msgWriter.WriteLine(Chalk.Yellow[$"[Waiting...]"]);
                 await Task.Delay(500 + (int)(ex.RetryAfter * 1000), this.CancelToken);
-                this.msgWriter.WriteLine();
             }
         }
     }
@@ -189,6 +188,23 @@ public record BookStackVersion : IComparable<BookStackVersion>
 
 }
 
+
+public static async IAsyncEnumerable<ShelfSummary> EnumerateAllShelvesAsync(this BookStackClientHelper self, IReadOnlyList<Filter>? filters = default)
+{
+    var offset = 0;
+    while (true)
+    {
+        var shelves = await self.Try(c => c.ListShelvesAsync(new(offset, count: 500, filters: filters), self.CancelToken));
+        foreach (var shelf in shelves.data)
+        {
+            yield return shelf;
+        }
+
+        offset += shelves.data.Length;
+        var finished = (shelves.data.Length <= 0) || (shelves.total <= offset);
+        if (finished) break;
+    }
+}
 
 public static async IAsyncEnumerable<BookSummary> EnumerateAllBooksAsync(this BookStackClientHelper self, IReadOnlyList<Filter>? filters = default)
 {

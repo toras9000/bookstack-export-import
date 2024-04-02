@@ -46,7 +46,7 @@ await Paved.RunAsync(async () =>
         }
     }
 
-    // Delete Book
+    // Delete Books
     Console.WriteLine($"Delete Books");
     while (true)
     {
@@ -59,6 +59,22 @@ await Paved.RunAsync(async () =>
         {
             Console.WriteLine($"Delete [{book.id}] {Chalk.Green[book.name]}");
             await helper.Try(s => s.DeleteBookAsync(book.id, cancelToken: signal.Token));
+        }
+    }
+
+    // Delete Shelves
+    Console.WriteLine($"Delete Shelves");
+    while (true)
+    {
+        // Get a list of shelves
+        var shelves = await helper.Try(s => s.ListShelvesAsync(new(count: 500), cancelToken: signal.Token));
+        if (shelves.data.Length <= 0) break;
+
+        // Delete each shelf
+        foreach (var shelf in shelves.data)
+        {
+            Console.WriteLine($"Delete [{shelf.id}] {Chalk.Green[shelf.name]}");
+            await helper.Try(s => s.DeleteShelfAsync(shelf.id, cancelToken: signal.Token));
         }
     }
 

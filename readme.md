@@ -25,8 +25,9 @@ These scripts only reproduce the contents of the book.
 The following points should be carefully identified.  
 
 - Only books, chapters, pages, attachments, and gallery images can be exported/imported.
-    - Shelves do not export/import.
     - Comments do not export/import.
+    - Shelves will be partially restored in some cases.
+        - If there is a shelf with the same name, simply make the book belong there.
 - Ownership, permissions, etc. are restored on a name basis.
     - No users or roles are created.
     - Compare with already existing users and roles by name and restore only if uniquely identified.
