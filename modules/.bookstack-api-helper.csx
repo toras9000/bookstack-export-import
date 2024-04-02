@@ -190,12 +190,12 @@ public record BookStackVersion : IComparable<BookStackVersion>
 }
 
 
-public static async IAsyncEnumerable<BookSummary> EnumerateAllBooksAsync(this BookStackClientHelper self)
+public static async IAsyncEnumerable<BookSummary> EnumerateAllBooksAsync(this BookStackClientHelper self, IReadOnlyList<Filter>? filters = default)
 {
     var offset = 0;
     while (true)
     {
-        var books = await self.Try(c => c.ListBooksAsync(new(offset, count: 500), self.CancelToken));
+        var books = await self.Try(c => c.ListBooksAsync(new(offset, count: 500, filters: filters), self.CancelToken));
         foreach (var book in books.data)
         {
             yield return book;
@@ -207,13 +207,13 @@ public static async IAsyncEnumerable<BookSummary> EnumerateAllBooksAsync(this Bo
     }
 }
 
-public static async IAsyncEnumerable<UserSummary> EnumerateAllUsersAsync(this BookStackClientHelper self)
+public static async IAsyncEnumerable<UserSummary> EnumerateAllUsersAsync(this BookStackClientHelper self, IReadOnlyList<Filter>? filters = default)
 {
     var offset = 0;
     var allUsers = new List<UserSummary>();
     while (true)
     {
-        var users = await self.Try(c => c.ListUsersAsync(new(offset, count: 500), self.CancelToken));
+        var users = await self.Try(c => c.ListUsersAsync(new(offset, count: 500, filters: filters), self.CancelToken));
         foreach (var user in users.data)
         {
             yield return user;
@@ -225,13 +225,13 @@ public static async IAsyncEnumerable<UserSummary> EnumerateAllUsersAsync(this Bo
     }
 }
 
-public static async IAsyncEnumerable<RoleSummary> EnumerateAllRolesAsync(this BookStackClientHelper self)
+public static async IAsyncEnumerable<RoleSummary> EnumerateAllRolesAsync(this BookStackClientHelper self, IReadOnlyList<Filter>? filters = default)
 {
     var offset = 0;
     var allRoles = new List<RoleSummary>();
     while (true)
     {
-        var roles = await self.Try(c => c.ListRolesAsync(new(offset, count: 500), self.CancelToken));
+        var roles = await self.Try(c => c.ListRolesAsync(new(offset, count: 500, filters: filters), self.CancelToken));
         foreach (var role in roles.data)
         {
             yield return role;
@@ -239,6 +239,66 @@ public static async IAsyncEnumerable<RoleSummary> EnumerateAllRolesAsync(this Bo
 
         offset += roles.data.Length;
         var finished = (roles.data.Length <= 0) || (roles.total <= offset);
+        if (finished) break;
+    }
+}
+
+public static IAsyncEnumerable<AttachmentItem> EnumeratePageAttachmentsAsync(this BookStackClientHelper self, long pageId)
+{
+    // Filter criteria to identify the target page.
+    var pageFilter = new Filter[]
+    {
+        new ($"uploaded_to", $"{pageId}"),
+    };
+
+    return self.EnumerateAllAttachmentsAsync(pageFilter);
+}
+
+public static async IAsyncEnumerable<AttachmentItem> EnumerateAllAttachmentsAsync(this BookStackClientHelper self, IReadOnlyList<Filter>? filters = default)
+{
+    var offset = 0;
+    while (true)
+    {
+        // Obtain attachment information.
+        var attachments = await self.Try(c => c.ListAttachmentsAsync(new(offset, count: 500, filters: filters), self.CancelToken));
+        foreach (var attach in attachments.data)
+        {
+            yield return attach;
+        }
+
+        // Update search information and determine end of search.
+        offset += attachments.data.Length;
+        var finished = (attachments.data.Length <= 0) || (attachments.total <= offset);
+        if (finished) break;
+    }
+}
+
+public static IAsyncEnumerable<ImageSummary> EnumeratePageImagesAsync(this BookStackClientHelper self, long pageId)
+{
+    // Filter criteria to identify the target page.
+    var pageFilter = new Filter[]
+    {
+        new ($"uploaded_to", $"{pageId}"),
+    };
+
+    return self.EnumerateAllImagesAsync(pageFilter);
+}
+
+public static async IAsyncEnumerable<ImageSummary> EnumerateAllImagesAsync(this BookStackClientHelper self, IReadOnlyList<Filter>? filters = default)
+{
+    var offset = 0;
+    while (true)
+    {
+        // Obtain image information.
+        var images = await self.Try(c => c.ListImagesAsync(new(offset, count: 500, filters: filters), self.CancelToken));
+        foreach (var image in images.data)
+        {
+            yield return image;
+        }
+
+        // Update search information and determine end of search.
+        offset += images.data.Length;
+        var finished = (images.data.Length <= 0) || (images.total <= offset);
         if (finished) break;
     }
 }
