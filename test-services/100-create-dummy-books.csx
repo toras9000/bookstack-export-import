@@ -1,5 +1,5 @@
-#r "nuget: Lestaly, 0.58.0"
-#r "nuget: SkiaSharp, 2.88.7"
+#r "nuget: Lestaly, 0.62.0"
+#r "nuget: SkiaSharp, 2.88.8"
 #load "../modules/.bookstack-api-helper.csx"
 #nullable enable
 using System.Net.Http;
