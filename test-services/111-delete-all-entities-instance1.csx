@@ -1,4 +1,4 @@
-#r "nuget: Lestaly, 0.62.0"
+#r "nuget: Lestaly, 0.64.0"
 #load "../modules/.bookstack-api-helper.csx"
 #nullable enable
 using System.Net.Http;

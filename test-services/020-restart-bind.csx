@@ -1,4 +1,4 @@
-#r "nuget: Lestaly, 0.62.0"
+#r "nuget: Lestaly, 0.64.0"
 #nullable enable
 using System.Net.Http;
 using System.Threading;

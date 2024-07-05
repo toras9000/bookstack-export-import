@@ -1,5 +1,5 @@
 #r "nuget: Kokuban, 0.2.0"
-#r "nuget: Lestaly, 0.62.0"
+#r "nuget: Lestaly, 0.64.0"
 #nullable enable
 using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
@@ -19,7 +19,7 @@ var settings = new
     Packages = new PackageVersion[]
     {
         new("BookStackApiClient",                    "24.5.0-lib.1"),
-        new("Lestaly",                               "0.62.0"),
+        new("Lestaly",                               "0.64.0"),
         new("SkiaSharp",                             "2.88.8"),
         new("Kokuban",                               "0.2.0"),
         new("System.Interactive.Async",              "6.0.1"),
