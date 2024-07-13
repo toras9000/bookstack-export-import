@@ -205,7 +205,7 @@ async ValueTask exportPageAsync(ExportContext context, DirectoryInfo baseDir, lo
     await pageDir.RelativeFile("page-meta.json").WriteJsonAsync(pageMeta, context.JsonOptions);
 
     // Save the page content corresponding to the editor.
-    if (page.editor == "markdown")
+    if (page.markdown.IsNotWhite())
     {
         await pageDir.RelativeFile("page-content.md").WriteAllTextAsync(page.markdown);
     }

@@ -285,11 +285,10 @@ async ValueTask<PageItem?> importPageAsync(ImportContext context, DirectoryInfo 
 
     // Generate page creation arguments.
     var createArgs = default(CreatePageArgs);
-    if (pageMeta.editor == "markdown")
+    var contentFile = pageDir.RelativeFile("page-content.md");
+    if (contentFile.Exists)
     {
         // If the page content is in Markdown format.
-        var contentFile = pageDir.RelativeFile("page-content.md");
-        if (!contentFile.Exists) { notify?.Invoke($"Import skipped due to missing page content file '{contentFile.Name}'."); return null; }
         var content = await contentFile.ReadAllTextAsync(context.CancelToken);
         if (content.IsWhite()) { notify?.Invoke($"Import skipped due to empty page content."); return null; }
         createArgs = baseArgs with { name = pageMeta.name, tags = pageMeta.tags, markdown = content, };
@@ -297,7 +296,7 @@ async ValueTask<PageItem?> importPageAsync(ImportContext context, DirectoryInfo 
     else
     {
         // If the page content is in HTML format
-        var contentFile = pageDir.RelativeFile("page-content.html");
+        contentFile = pageDir.RelativeFile("page-content.html");
         if (!contentFile.Exists) { notify?.Invoke($"Import skipped due to missing page content file '{contentFile.Name}'."); return null; }
         var content = await contentFile.ReadAllTextAsync(context.CancelToken);
         if (content.IsWhite()) { notify?.Invoke($"Import skipped due to empty page content."); return null; }
