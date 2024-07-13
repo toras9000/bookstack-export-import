@@ -1,6 +1,7 @@
-#r "nuget: Lestaly, 0.64.0"
+#r "nuget: Lestaly, 0.65.0"
 #r "nuget: SkiaSharp, 2.88.8"
 #load "../modules/.bookstack-api-helper.csx"
+#load ".compose-helper.csx"
 #nullable enable
 using System.Net.Http;
 using System.Threading;
@@ -12,7 +13,8 @@ using SkiaSharp;
 await Paved.RunAsync(async () =>
 {
     // BookStack service URL.
-    var serviceUri = new Uri("http://localhost:9971/");
+    var portNum = await composeGetPublishPort(1);
+    var serviceUri = new Uri($"http://localhost:{portNum}/");
 
     // API Token and Secret Key
     var apiToken = "00001111222233334444555566667777";
@@ -125,7 +127,7 @@ await Paved.RunAsync(async () =>
                     }
                     else
                     {
-                        var attachLink = $"http://localhost/{linkPath}/{a}";
+                        var attachLink = $"http://localhost{portNum}/{linkPath}/{a}";
                         var attach = await helper.Try(s => s.CreateLinkAttachmentAsync(new($"Text-{attachLabel}", page.id, attachLink), signal.Token));
                     }
                 }

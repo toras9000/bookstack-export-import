@@ -1,4 +1,5 @@
-#r "nuget: Lestaly, 0.64.0"
+#r "nuget: Lestaly, 0.65.0"
+#load ".compose-helper.csx"
 #nullable enable
 using System.Threading;
 using Lestaly;
@@ -7,12 +8,10 @@ using Lestaly.Cx;
 await Paved.RunAsync(async () =>
 {
     Console.WriteLine("Stop service");
-    var composeFile = ThisSource.RelativeFile("./docker/compose.yml");
-    await "docker".args("compose", "--file", composeFile.FullName, "down", "--remove-orphans", "--volumes").silent();
+    await composeDownAsync().silent();
 
     Console.WriteLine("Delete volumes");
-    var volumesDir = ThisSource.RelativeDirectory("./docker/volumes");
-    volumesDir.DeleteRecurse();
+    ThisSource.RelativeDirectory("./docker/volumes").DeleteRecurse();
 
     Console.WriteLine("completed.");
 });

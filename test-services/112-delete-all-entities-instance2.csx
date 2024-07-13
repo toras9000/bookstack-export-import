@@ -1,5 +1,6 @@
-#r "nuget: Lestaly, 0.64.0"
+#r "nuget: Lestaly, 0.65.0"
 #load "../modules/.bookstack-api-helper.csx"
+#load ".compose-helper.csx"
 #nullable enable
 using System.Net.Http;
 using System.Threading;
@@ -11,7 +12,8 @@ using Lestaly;
 await Paved.RunAsync(async () =>
 {
     // BookStack service URL.
-    var serviceUri = new Uri("http://localhost:9972/");
+    var portNum = await composeGetPublishPort(2);
+    var serviceUri = new Uri($"http://localhost:{portNum}/");
 
     // API Token and Secret Key
     var apiToken = "444455556666777788889999aaaabbbb";
