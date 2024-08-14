@@ -1,4 +1,4 @@
-#r "nuget: Lestaly, 0.65.0"
+#r "nuget: Lestaly, 0.67.0"
 #r "nuget: SkiaSharp, 2.88.8"
 #load "../modules/.bookstack-api-helper.csx"
 #load ".compose-helper.csx"
