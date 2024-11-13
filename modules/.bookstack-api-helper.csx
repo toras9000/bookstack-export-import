@@ -1,12 +1,12 @@
-#r "nuget: BookStackApiClient, 24.5.0-lib.1"
+#r "nuget: BookStackApiClient, 25.5.0-lib.1"
 #r "nuget: Kokuban, 0.2.0"
 #nullable enable
-using System.Threading;
-using Kokuban;
-using BookStackApiClient;
+using System.Diagnostics.CodeAnalysis;
 using System.Net.Http;
 using System.Text.RegularExpressions;
-using System.Diagnostics.CodeAnalysis;
+using System.Threading;
+using BookStackApiClient;
+using Kokuban;
 
 /// <summary>API key information</summary>
 /// <param name="Token">API token</param>

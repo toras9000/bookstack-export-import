@@ -1,4 +1,4 @@
-#r "nuget: Lestaly, 0.67.0"
+#r "nuget: Lestaly, 0.83.0"
 #load "modules/.bookstack-api-helper.csx"
 #load "modules/.bookstack-data.csx"
 #nullable enable
@@ -15,7 +15,7 @@ var settings = new
     BookStack = new
     {
         // Target BookStack service address
-        ServiceUrl = new Uri("http://localhost:9971/"),
+        ServiceUrl = new Uri("http://localhost:8811/"),
 
         // API token of the user performing the export
         ApiToken = "00001111222233334444555566667777",
@@ -31,16 +31,16 @@ var settings = new
     },
 };
 
-return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
+return await Paved.ProceedAsync(async () =>
 {
     // Prepare console
     using var outenc = ConsoleWig.OutputEncodingPeriod(Encoding.UTF8);
-    using var signal = ConsoleWig.CreateCancelKeyHandlePeriod();
+    using var signal = new SignalCancellationPeriod();
 
     // Title display
-    Console.WriteLine($"Exporting data from BookStack");
-    Console.WriteLine($"  Service Address: {settings.BookStack.ServiceUrl}");
-    Console.WriteLine();
+    WriteLine($"Exporting data from BookStack");
+    WriteLine($"  Service Address: {settings.BookStack.ServiceUrl}");
+    WriteLine();
 
     // Create client and helper
     var apiUri = new Uri(settings.BookStack.ServiceUrl, "/api/");
@@ -58,8 +58,8 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
     // Determine output directory
     var exportTime = DateTime.Now;
     var exportDir = settings.Local.ExportDir.RelativeDirectory($"{exportTime:yyyy.MM.dd-HH.mm.ss}").WithCreate();
-    Console.WriteLine($"Export to {exportDir.FullName}");
-    Console.WriteLine();
+    WriteLine($"Export to {exportDir.FullName}");
+    WriteLine();
 
     // Options for saving JSON
     var jsonOptions = new JsonSerializerOptions();
@@ -76,7 +76,7 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
     await foreach (var summary in context.Helper.EnumerateAllBooksAsync())
     {
         // Indicate the status.
-        Console.WriteLine($"Exporting book: {Chalk.Green[summary.name]} ...");
+        WriteLine($"Exporting book: {Chalk.Green[summary.name]} ...");
 
         // Read book information
         var book = await context.Helper.Try(c => c.ReadBookAsync(summary.id, context.CancelToken));
@@ -102,7 +102,7 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
             if (content is BookContentChapter chapterContent)
             {
                 // Read chapter information
-                Console.WriteLine($"  Chapter: {Chalk.Green[chapterContent.name]} ...");
+                WriteLine($"  Chapter: {Chalk.Green[chapterContent.name]} ...");
                 var chapter = await context.Helper.Try(c => c.ReadChapterAsync(chapterContent.id, context.CancelToken));
                 var chapterPerms = await context.Helper.Try(c => c.ReadChapterPermissionsAsync(chapterContent.id, context.CancelToken));
 
@@ -114,14 +114,14 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
                 // Save each page in a chapter
                 foreach (var pageContent in chapter.pages)
                 {
-                    Console.WriteLine($"    Page: {Chalk.Green[pageContent.name]} ...");
+                    WriteLine($"    Page: {Chalk.Green[pageContent.name]} ...");
                     await exportPageAsync(context, chapterDir, pageContent.id);
                 }
             }
             else if (content is BookContentPage pageContent)
             {
                 // Save page
-                Console.WriteLine($"  Page: {Chalk.Green[pageContent.name]} ...");
+                WriteLine($"  Page: {Chalk.Green[pageContent.name]} ...");
                 await exportPageAsync(context, bookDir, pageContent.id);
             }
         }
@@ -134,7 +134,7 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
     await foreach (var summary in context.Helper.EnumerateAllShelvesAsync())
     {
         // Indicate the status.
-        Console.WriteLine($"Exporting shelf: {Chalk.Green[summary.name]} ...");
+        WriteLine($"Exporting shelf: {Chalk.Green[summary.name]} ...");
 
         // Read shelf information
         var shelf = await context.Helper.Try(c => c.ReadShelfAsync(summary.id, context.CancelToken));
@@ -153,7 +153,7 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
         }
     }
 
-    Console.WriteLine($"Completed");
+    WriteLine($"Completed");
 
 });
 

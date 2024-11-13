@@ -1,7 +1,5 @@
-#r "nuget: BookStackApiClient, 24.5.0-lib.1"
+#r "nuget: BookStackApiClient, 25.5.0-lib.1"
 #nullable enable
-using System.Diagnostics.CodeAnalysis;
-using System.Text.RegularExpressions;
 using BookStackApiClient;
 
 record ExportMetadata(string service_url, string version, DateTime export_at, User export_by);

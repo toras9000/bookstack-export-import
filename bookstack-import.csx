@@ -1,5 +1,5 @@
 #r "nuget: System.Interactive.Async, 6.0.1"
-#r "nuget: Lestaly, 0.67.0"
+#r "nuget: Lestaly, 0.83.0"
 #load "modules/.bookstack-api-helper.csx"
 #load "modules/.bookstack-data.csx"
 #nullable enable
@@ -30,7 +30,7 @@ var settings = new
     BookStack = new
     {
         // Target BookStack service address
-        ServiceUrl = new Uri("http://localhost:9972/"),
+        ServiceUrl = new Uri("http://localhost:8821/"),
 
         // API token of the user performing the export
         ApiToken = "444455556666777788889999aaaabbbb",
@@ -41,16 +41,16 @@ var settings = new
 
 };
 
-return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
+return await Paved.ProceedAsync(async () =>
 {
     // Prepare console
     using var outenc = ConsoleWig.OutputEncodingPeriod(Encoding.UTF8);
-    using var signal = ConsoleWig.CreateCancelKeyHandlePeriod();
+    using var signal = new SignalCancellationPeriod();
 
     // Title display
-    Console.WriteLine($"Importing data into BookStack");
-    Console.WriteLine($"  Service Address: {settings.BookStack.ServiceUrl}");
-    Console.WriteLine();
+    WriteLine($"Importing data into BookStack");
+    WriteLine($"  Service Address: {settings.BookStack.ServiceUrl}");
+    WriteLine();
 
     // Create client and helper
     var apiUri = new Uri(settings.BookStack.ServiceUrl, "/api/");
@@ -63,8 +63,9 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
     if (version < new BookStackVersion("23.12.0")) throw new PavedMessageException("Unsupported BookStack version.", PavedMessageKind.Warning);
 
     // Have the user enter the location of the data to be captured.
-    ConsoleWig.WriteLine("Specify the directory for the imported data.").Write(">");
-    var importInput = ConsoleWig.ReadLine().CancelIfWhite();
+    WriteLine("Specify the directory for the imported data.");
+    Write(">");
+    var importInput = ReadLine()?.Unquote().CancelIfWhite();
     var importDataDir = CurrentDir.RelativeDirectory(importInput);
 
     // Reads information from imported data
@@ -141,12 +142,12 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
         if (bookMeta == null) continue;
 
         // Indicate the status.
-        Console.WriteLine($"Importing book: {Chalk.Green[bookMeta.name]} ...");
+        WriteLine($"Importing book: {Chalk.Green[bookMeta.name]} ...");
 
         // Determine if it is subject to skipping by the same title.
         if (instance.BookTitles?.Contains(bookMeta.name) == true)
         {
-            Console.WriteLine($"  Skip due to the existence of the same title book.");
+            WriteLine($"  Skip due to the existence of the same title book.");
             continue;
         }
 
@@ -163,7 +164,7 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
         // Restore book permissions
         if (settings.Options.RestorePermissions && bookMeta.permissions != null)
         {
-            await restorePermissionsAsync(context, instance, "book", book.id, bookMeta.permissions, info => Console.WriteLine($"  {Chalk.Yellow[info]}"));
+            await restorePermissionsAsync(context, instance, "book", book.id, bookMeta.permissions, info => WriteLine($"  {Chalk.Yellow[info]}"));
         }
 
         // Search and import content directories.
@@ -177,14 +178,14 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
                 if (pageMeta == null) continue;
 
                 // Create a page in the book.
-                Console.WriteLine($"  Page: {Chalk.Green[pageMeta.name]} ...");
-                var page = await importPageAsync(context, contentDir, pageMeta, new("", book_id: book.id), info => Console.WriteLine($"    {Chalk.Yellow[info]}"));
+                WriteLine($"  Page: {Chalk.Green[pageMeta.name]} ...");
+                var page = await importPageAsync(context, contentDir, pageMeta, new("", book_id: book.id), info => WriteLine($"    {Chalk.Yellow[info]}"));
                 if (page != null)
                 {
                     // Restore page permissions
                     if (settings.Options.RestorePermissions && pageMeta.permissions != null)
                     {
-                        await restorePermissionsAsync(context, instance, "page", page.id, pageMeta.permissions, info => Console.WriteLine($"    {Chalk.Yellow[info]}"));
+                        await restorePermissionsAsync(context, instance, "page", page.id, pageMeta.permissions, info => WriteLine($"    {Chalk.Yellow[info]}"));
                     }
                 }
             }
@@ -195,13 +196,13 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
                 if (chapterMeta == null) continue;
 
                 // Create chapter.
-                Console.WriteLine($"  Chapter: {Chalk.Green[chapterMeta.name]} ...");
+                WriteLine($"  Chapter: {Chalk.Green[chapterMeta.name]} ...");
                 var chapter = await context.Helper.Try(c => c.CreateChapterAsync(new(book.id, chapterMeta.name, description_html: chapterMeta.description, tags: chapterMeta.tags), context.CancelToken));
 
                 // Restore chapter permissions
                 if (settings.Options.RestorePermissions && chapterMeta.permissions != null)
                 {
-                    await restorePermissionsAsync(context, instance, "chapter", chapter.id, chapterMeta.permissions, info => Console.WriteLine($"    {Chalk.Yellow[info]}"));
+                    await restorePermissionsAsync(context, instance, "chapter", chapter.id, chapterMeta.permissions, info => WriteLine($"    {Chalk.Yellow[info]}"));
                 }
 
                 // Importing pages in chapter
@@ -216,14 +217,14 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
                     if (pageMeta == null) continue;
 
                     // Create pages in chapter.
-                    Console.WriteLine($"    Page: {Chalk.Green[pageMeta.name]} ...");
-                    var page = await importPageAsync(context, pageDir, pageMeta, new("", chapter_id: chapter.id), info => Console.WriteLine($"      {Chalk.Yellow[info]}"));
+                    WriteLine($"    Page: {Chalk.Green[pageMeta.name]} ...");
+                    var page = await importPageAsync(context, pageDir, pageMeta, new("", chapter_id: chapter.id), info => WriteLine($"      {Chalk.Yellow[info]}"));
                     if (page != null)
                     {
                         // Restore page permissions
                         if (settings.Options.RestorePermissions && pageMeta.permissions != null)
                         {
-                            await restorePermissionsAsync(context, instance, "page", page.id, pageMeta.permissions, info => Console.WriteLine($"      {Chalk.Yellow[info]}"));
+                            await restorePermissionsAsync(context, instance, "page", page.id, pageMeta.permissions, info => WriteLine($"      {Chalk.Yellow[info]}"));
                         }
                     }
                 }
@@ -251,7 +252,7 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
             // Restore book permissions
             if (settings.Options.RestorePermissions && meta.permissions != null)
             {
-                await restorePermissionsAsync(context, instance, "bookshelf", meta.id, meta.permissions, info => Console.WriteLine($"  {Chalk.Yellow[info]}"));
+                await restorePermissionsAsync(context, instance, "bookshelf", meta.id, meta.permissions, info => WriteLine($"  {Chalk.Yellow[info]}"));
             }
         }
         else
@@ -263,7 +264,7 @@ return await Paved.RunAsync(config: c => c.AnyPause(), action: async () =>
         }
     }
 
-    Console.WriteLine($"Completed");
+    WriteLine($"Completed");
 
 });
 

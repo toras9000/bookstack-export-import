@@ -1,7 +1,6 @@
 #r "nuget: Kokuban, 0.2.0"
-#r "nuget: Lestaly, 0.67.0"
+#r "nuget: Lestaly, 0.83.0"
 #nullable enable
-using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 using Kokuban;
 using Lestaly;
@@ -18,15 +17,22 @@ var settings = new
     // Packages and versions to be unified and updated
     Packages = new PackageVersion[]
     {
-        new("BookStackApiClient",                    "24.5.0-lib.1"),
-        new("Lestaly",                               "0.67.0"),
-        new("SkiaSharp",                             "2.88.8"),
+        new("BookStackApiClient",                    "25.5.0-lib.1"),
+        new("Lestaly",                               "0.83.0"),
+        new("SkiaSharp",                             "3.119.0"),
+        new("Faker.Net",                             "2.0.163"),
         new("Kokuban",                               "0.2.0"),
         new("System.Interactive.Async",              "6.0.1"),
     },
 };
 
-return await Paved.RunAsync(config: o => o.AnyPause(), action: async () =>
+// Package version information data type
+record PackageVersion(string Name, string Version)
+{
+    public SemanticVersion SemanticVersion { get; } = SemanticVersion.Parse(Version);
+}
+
+return await Paved.ProceedAsync(async () =>
 {
     // Detection regular expression for package reference directives
     var detector = new Regex(@"^\s*#\s*r\s+""\s*nuget\s*:\s*(?<package>[a-zA-Z0-9_\-\.]+)(?:,| )\s*(?<version>.+)\s*""");
@@ -37,7 +43,7 @@ return await Paved.RunAsync(config: o => o.AnyPause(), action: async () =>
     // Search for scripts under the target directory
     foreach (var file in settings.TargetDir.EnumerateFiles("*.csx", SearchOption.AllDirectories))
     {
-        Console.WriteLine($"File: {file.RelativePathFrom(settings.TargetDir, ignoreCase: true)}");
+        WriteLine($"File: {file.RelativePathFrom(settings.TargetDir, ignoreCase: true)}");
 
         // Read file contents
         var lines = await file.ReadAllLinesAsync();
@@ -57,21 +63,21 @@ return await Paved.RunAsync(config: o => o.AnyPause(), action: async () =>
             var pkgName = match.Groups["package"].Value;
             if (!versions.TryGetValue(pkgName, out var package))
             {
-                Console.WriteLine(Chalk.BrightYellow[$"  Skip: {pkgName} - Not update target"]);
+                WriteLine(Chalk.BrightYellow[$"  Skip: {pkgName} - Not update target"]);
                 continue;
             }
 
             // Parse the version number.
             if (!SemanticVersion.TryParse(match.Groups["version"].Value, out var pkgVer))
             {
-                Console.WriteLine(Chalk.BrightYellow[$"  Skip: Unable to recognize version number"]);
+                WriteLine(Chalk.BrightYellow[$"  Skip: Unable to recognize version number"]);
                 continue;
             }
 
             // Determine if the package version needs to be updated.
             if (pkgVer == package.SemanticVersion)
             {
-                Console.WriteLine(Chalk.BrightYellow[$"  Skip: {pkgName} - Already in version"]);
+                WriteLine(Chalk.BrightYellow[$"  Skip: {pkgName} - Already in version"]);
                 continue;
             }
 
@@ -81,7 +87,7 @@ return await Paved.RunAsync(config: o => o.AnyPause(), action: async () =>
 
             // set a flag that there is an update
             updated = true;
-            Console.WriteLine(Chalk.Green[$"  Update: {pkgName} {pkgVer.Original} -> {package.Version}"]);
+            WriteLine(Chalk.Green[$"  Update: {pkgName} {pkgVer.Original} -> {package.Version}"]);
         }
 
         // Write back to file if updates are needed
@@ -91,47 +97,9 @@ return await Paved.RunAsync(config: o => o.AnyPause(), action: async () =>
         }
         else if (!detected)
         {
-            Console.WriteLine(Chalk.BrightYellow[$"  Directive not found"]);
+            WriteLine(Chalk.BrightYellow[$"  Directive not found"]);
         }
     }
 
 });
 
-// Package version information data type
-record PackageVersion(string Name, string Version)
-{
-    public SemanticVersion SemanticVersion { get; } = new SemanticVersion(Version);
-}
-
-// Data type for version value management
-record SemanticVersion
-{
-    public SemanticVersion(string version)
-    {
-        var match = VersionPattern.Match(version);
-        if (!match.Success) throw new ArgumentException("Illegal");
-        this.Original = version;
-        this.Major = int.Parse(match.Groups["major"].Value);
-        this.Minor = int.Parse(match.Groups["subver"].Captures[0].Value);
-        this.Patch = int.TryParse(match.Groups["subver"].Captures.ElementAtOrDefault(1)?.Value, out var patch) ? patch : default;
-        this.Filum = int.TryParse(match.Groups["subver"].Captures.ElementAtOrDefault(2)?.Value, out var filum) ? filum : default;
-        this.PreRelease = match.Groups["pre"].Value;
-        this.Build = match.Groups["build"].Value;
-    }
-
-    public string Original { get; }
-    public int Major { get; }
-    public int Minor { get; }
-    public int? Patch { get; }
-    public int? Filum { get; }
-    public string PreRelease { get; }
-    public string Build { get; }
-
-    public static bool TryParse(string text, [NotNullWhen(true)] out SemanticVersion? version)
-    {
-        try { version = new SemanticVersion(text); return true; }
-        catch { version = default; return false; }
-    }
-
-    private static readonly Regex VersionPattern = new(@"^(?<major>\d+)(?:\.(?<subver>\d+)){1,3}(?:\-(?<pre>.+))?(?:\+(?<build>.+))?$");
-}

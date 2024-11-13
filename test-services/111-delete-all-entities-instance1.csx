@@ -1,39 +1,30 @@
-#r "nuget: Lestaly, 0.67.0"
+#r "nuget: Lestaly, 0.83.0"
 #load "../modules/.bookstack-api-helper.csx"
-#load ".compose-helper.csx"
+#load ".settings.csx"
 #nullable enable
-using System.Net.Http;
 using System.Threading;
-using System.Xml.Linq;
 using BookStackApiClient;
 using Kokuban;
 using Lestaly;
 
 await Paved.RunAsync(async () =>
 {
-    // BookStack service URL.
-    var portNum = await composeGetPublishPort(1);
-    var serviceUri = new Uri($"http://localhost:{portNum}/");
-
-    // API Token and Secret Key
-    var apiToken = "00001111222233334444555566667777";
-    var apiSecret = "88889999aaaabbbbccccddddeeeeffff";
+    var instance = settings.Instance1;
 
     // Prepare console
     using var outenc = ConsoleWig.OutputEncodingPeriod(Encoding.UTF8);
-    using var signal = ConsoleWig.CreateCancelKeyHandlePeriod();
+    using var signal = new SignalCancellationPeriod();
 
     // Show info
-    Console.WriteLine($"Delete all books in BookStack.");
-    Console.WriteLine($"BookStack Service URL : {serviceUri}");
+    WriteLine($"Delete all books in BookStack.");
+    WriteLine($"BookStack Service URL : {instance.BookStack.Url}");
 
     // Create client and helper
-    var apiUri = new Uri(serviceUri, "/api/");
-    var apiKey = new ApiKey(apiToken, apiSecret);
-    using var helper = new BookStackClientHelper(apiUri, apiKey, cancelToken: signal.Token);
+    var apiKey = new ApiKey(instance.BookStack.ApiTokenId, instance.BookStack.ApiTokenSecret);
+    using var helper = new BookStackClientHelper(instance.BookStack.ApiEndpoint, apiKey, cancelToken: signal.Token);
 
     // Delete image gallery images
-    Console.WriteLine($"Delete Gallery Images");
+    WriteLine($"Delete Gallery Images");
     while (true)
     {
         // Get a list of images
@@ -43,13 +34,13 @@ await Paved.RunAsync(async () =>
         // Delete each image
         foreach (var image in images.data)
         {
-            Console.WriteLine($"..  Delete Image [{image.id}] {Chalk.Green[image.name]}");
+            WriteLine($"..  Delete Image [{image.id}] {Chalk.Green[image.name]}");
             await helper.Try(s => s.DeleteImageAsync(image.id, cancelToken: signal.Token));
         }
     }
 
     // Delete Books
-    Console.WriteLine($"Delete Books");
+    WriteLine($"Delete Books");
     while (true)
     {
         // Get a list of books
@@ -59,13 +50,13 @@ await Paved.RunAsync(async () =>
         // Delete each book
         foreach (var book in books.data)
         {
-            Console.WriteLine($"Delete [{book.id}] {Chalk.Green[book.name]}");
+            WriteLine($"Delete [{book.id}] {Chalk.Green[book.name]}");
             await helper.Try(s => s.DeleteBookAsync(book.id, cancelToken: signal.Token));
         }
     }
 
     // Delete Shelves
-    Console.WriteLine($"Delete Shelves");
+    WriteLine($"Delete Shelves");
     while (true)
     {
         // Get a list of shelves
@@ -75,13 +66,13 @@ await Paved.RunAsync(async () =>
         // Delete each shelf
         foreach (var shelf in shelves.data)
         {
-            Console.WriteLine($"Delete [{shelf.id}] {Chalk.Green[shelf.name]}");
+            WriteLine($"Delete [{shelf.id}] {Chalk.Green[shelf.name]}");
             await helper.Try(s => s.DeleteShelfAsync(shelf.id, cancelToken: signal.Token));
         }
     }
 
     // Empty the trash
-    Console.WriteLine($"Destroy RecycleBin");
+    WriteLine($"Destroy RecycleBin");
     while (true)
     {
         // Get a list of books
@@ -91,11 +82,11 @@ await Paved.RunAsync(async () =>
         // Delete Trash Items
         foreach (var recycle in recycles.data)
         {
-            Console.WriteLine($"Destroy [{recycle.id}]");
+            WriteLine($"Destroy [{recycle.id}]");
             await helper.Try(s => s.DestroyRecycleItemAsync(recycle.id, cancelToken: signal.Token));
         }
     }
 
-    Console.WriteLine($"Completed");
+    WriteLine($"Completed");
 });
 
