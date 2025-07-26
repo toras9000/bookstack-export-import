@@ -1,5 +1,5 @@
 #r "nuget: Kokuban, 0.2.0"
-#r "nuget: Lestaly, 0.83.0"
+#r "nuget: Lestaly.General, 0.100.0"
 #nullable enable
 using System.Text.RegularExpressions;
 using Kokuban;
@@ -17,12 +17,16 @@ var settings = new
     // Packages and versions to be unified and updated
     Packages = new PackageVersion[]
     {
-        new("BookStackApiClient",                    "25.5.0-lib.1"),
-        new("Lestaly",                               "0.83.0"),
+        new("BookStackApiClient",                    "25.5.0-lib.3"),
+        new("Lestaly.General",                       "0.100.0"),
         new("SkiaSharp",                             "3.119.0"),
         new("Faker.Net",                             "2.0.163"),
+        new("Bogus",                                 "35.6.3"),
         new("Kokuban",                               "0.2.0"),
-        new("System.Interactive.Async",              "6.0.1"),
+        new("R3",                                    "1.3.0"),
+        new("Dapper",                                "2.1.66"),
+        new("MySqlConnector",                        "2.4.0"),
+        new("BCrypt.Net-Next",                       "4.0.3"),
     },
 };
 

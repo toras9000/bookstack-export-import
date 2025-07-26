@@ -1,5 +1,5 @@
-#r "nuget: Lestaly, 0.83.0"
-#load "modules/.bookstack-api-helper.csx"
+#r "nuget: Lestaly.General, 0.100.0"
+#load "modules/.bookstack-helper.csx"
 #load "modules/.bookstack-data.csx"
 #nullable enable
 using System.Net.Http;
@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using BookStackApiClient;
+using BookStackApiClient.Utility;
 using Kokuban;
 using Lestaly;
 
@@ -45,12 +46,15 @@ return await Paved.ProceedAsync(async () =>
     // Create client and helper
     var apiUri = new Uri(settings.BookStack.ServiceUrl, "/api/");
     var apiKey = new ApiKey(settings.BookStack.ApiToken, settings.BookStack.ApiSecret);
-    using var helper = new BookStackClientHelper(apiUri, apiKey, cancelToken: signal.Token);
+    using var http = new HttpClient();
+    using var client = new BookStackClient(apiUri, apiKey.Token, apiKey.Secret);
+    using var helper = new BookStackClientHelper(client, signal.Token);
+    helper.HandleLimitMessage();
 
     // Detect BookStack version
-    var version = await helper.DetectBookStackVersionAsync(settings.BookStack.ServiceUrl);
+    var version = await http.DetectBookStackVersionAsync(settings.BookStack.ServiceUrl);
     if (version == null) throw new PavedMessageException("Unable to detect BookStack version.", PavedMessageKind.Warning);
-    if (version < new BookStackVersion("23.12.0")) throw new PavedMessageException("Unsupported BookStack version.", PavedMessageKind.Warning);
+    if (version < BookStackVersion.Parse("23.12.0")) throw new PavedMessageException("Unsupported BookStack version.", PavedMessageKind.Warning);
 
     // Obtain information about myself. This may not be obtained.
     var user_me = await helper.GetMeAsync();
@@ -66,10 +70,10 @@ return await Paved.ProceedAsync(async () =>
     jsonOptions.WriteIndented = true;
 
     // Create context instance
-    var context = new ExportContext(helper, jsonOptions, exportDir, signal.Token);
+    var context = new ExportContext(helper, http, jsonOptions, exportDir, signal.Token);
 
     // Output export information
-    var exportMeta = new ExportMetadata(settings.BookStack.ServiceUrl.AbsoluteUri, version.OriginalString, exportTime, user_me);
+    var exportMeta = new ExportMetadata(settings.BookStack.ServiceUrl.AbsoluteUri, version, exportTime, user_me);
     await exportDir.RelativeFile("export-meta.json").WriteJsonAsync(exportMeta, jsonOptions);
 
     // Retrieve information for each book
@@ -79,8 +83,8 @@ return await Paved.ProceedAsync(async () =>
         WriteLine($"Exporting book: {Chalk.Green[summary.name]} ...");
 
         // Read book information
-        var book = await context.Helper.Try(c => c.ReadBookAsync(summary.id, context.CancelToken));
-        var bookPerms = await context.Helper.Try(c => c.ReadBookPermissionsAsync(summary.id, context.CancelToken));
+        var book = await context.Helper.Try((c, _) => c.ReadBookAsync(summary.id, context.CancelToken));
+        var bookPerms = await context.Helper.Try((c, _) => c.ReadBookPermissionsAsync(summary.id, context.CancelToken));
 
         // Save book information
         var bookDir = exportDir.RelativeDirectory($"{book.id:D4}B.{book.name.ToFileName()}").WithCreate();
@@ -92,7 +96,7 @@ return await Paved.ProceedAsync(async () =>
         {
             var coverUrl = new Uri(book.cover.url);
             var coverFile = bookDir.RelativeFile($"book-cover{Path.GetExtension(coverUrl.AbsolutePath)}");
-            await context.Helper.Http.GetFileAsync(coverUrl, coverFile.FullName, context.CancelToken);
+            await context.Http.GetFileAsync(coverUrl, coverFile.FullName, context.CancelToken);
         }
 
         // Save Book Contents
@@ -103,8 +107,8 @@ return await Paved.ProceedAsync(async () =>
             {
                 // Read chapter information
                 WriteLine($"  Chapter: {Chalk.Green[chapterContent.name]} ...");
-                var chapter = await context.Helper.Try(c => c.ReadChapterAsync(chapterContent.id, context.CancelToken));
-                var chapterPerms = await context.Helper.Try(c => c.ReadChapterPermissionsAsync(chapterContent.id, context.CancelToken));
+                var chapter = await context.Helper.Try((c, _) => c.ReadChapterAsync(chapterContent.id, context.CancelToken));
+                var chapterPerms = await context.Helper.Try((c, _) => c.ReadChapterPermissionsAsync(chapterContent.id, context.CancelToken));
 
                 // Save chapter information
                 var chapterDir = bookDir.RelativeDirectory($"{chapter.priority:D4}C.{chapter.name.ToFileName()}").WithCreate();
@@ -137,8 +141,8 @@ return await Paved.ProceedAsync(async () =>
         WriteLine($"Exporting shelf: {Chalk.Green[summary.name]} ...");
 
         // Read shelf information
-        var shelf = await context.Helper.Try(c => c.ReadShelfAsync(summary.id, context.CancelToken));
-        var shelfPerms = await context.Helper.Try(c => c.ReadShelfPermissionsAsync(summary.id, context.CancelToken));
+        var shelf = await context.Helper.Try((c, _) => c.ReadShelfAsync(summary.id, context.CancelToken));
+        var shelfPerms = await context.Helper.Try((c, _) => c.ReadShelfPermissionsAsync(summary.id, context.CancelToken));
 
         // Save shelf information
         var shelfMeta = createMetadata(shelf, shelfPerms);
@@ -149,7 +153,7 @@ return await Paved.ProceedAsync(async () =>
         {
             var coverUrl = new Uri(shelf.cover.url);
             var coverFile = shelvesDir.RelativeFile($"{shelf.id:D4}S-cover{Path.GetExtension(coverUrl.AbsolutePath)}");
-            await context.Helper.Http.GetFileAsync(coverUrl, coverFile.FullName, context.CancelToken);
+            await context.Http.GetFileAsync(coverUrl, coverFile.FullName, context.CancelToken);
         }
     }
 
@@ -157,7 +161,7 @@ return await Paved.ProceedAsync(async () =>
 
 });
 
-record ExportContext(BookStackClientHelper Helper, JsonSerializerOptions JsonOptions, DirectoryInfo ExportDir, CancellationToken CancelToken);
+record ExportContext(BookStackClientHelper Helper, HttpClient Http, JsonSerializerOptions JsonOptions, DirectoryInfo ExportDir, CancellationToken CancelToken);
 
 ShelfMetadata createMetadata(ReadShelfResult shelf, ContentPermissionsItem permissions)
     => new(
@@ -196,8 +200,8 @@ PageMetadata createMetadata(ReadPageResult page, ContentPermissionsItem permissi
 async ValueTask exportPageAsync(ExportContext context, DirectoryInfo baseDir, long pageId)
 {
     // Read page information
-    var page = await context.Helper.Try(c => c.ReadPageAsync(pageId, context.CancelToken));
-    var pagePerms = await context.Helper.Try(c => c.ReadPagePermissionsAsync(pageId, context.CancelToken));
+    var page = await context.Helper.Try((c, _) => c.ReadPageAsync(pageId, context.CancelToken));
+    var pagePerms = await context.Helper.Try((c, _) => c.ReadPagePermissionsAsync(pageId, context.CancelToken));
 
     // Save page information
     var pageDir = baseDir.RelativeDirectory($"{page.priority:D4}P.{page.name.ToFileName()}").WithCreate();
@@ -219,7 +223,7 @@ async ValueTask exportPageAsync(ExportContext context, DirectoryInfo baseDir, lo
     await foreach (var attachInfo in context.Helper.EnumeratePageAttachmentsAsync(pageId))
     {
         // Obtain attachment information.
-        var attach = await context.Helper.Try(c => c.ReadAttachmentAsync(attachInfo.id, context.CancelToken));
+        var attach = await context.Helper.Try((c, _) => c.ReadAttachmentAsync(attachInfo.id, context.CancelToken));
 
         // Save attachment information
         await attachDir.WithCreate().RelativeFile($"{attach.id:D4}A.attach-meta.json").WriteJsonAsync(attach, context.JsonOptions);
@@ -230,12 +234,12 @@ async ValueTask exportPageAsync(ExportContext context, DirectoryInfo baseDir, lo
     await foreach (var imageInfo in context.Helper.EnumeratePageImagesAsync(pageId))
     {
         // Obtain image information.
-        var image = await context.Helper.Try(c => c.ReadImageAsync(imageInfo.id, context.CancelToken));
+        var image = await context.Helper.Try((c, _) => c.ReadImageAsync(imageInfo.id, context.CancelToken));
         await imageDir.WithCreate().RelativeFile($"{image.id:D4}I.image-meta.json").WriteJsonAsync(image, context.JsonOptions);
 
         // Save image file
         var imageFile = imageDir.RelativeFile($"{image.id:D4}I.{Path.GetFileName(image.path)}");
-        await context.Helper.Http.GetFileAsync(new(image.url), imageFile, context.CancelToken);
+        await context.Http.GetFileAsync(new(image.url), imageFile, context.CancelToken);
     }
 
 }

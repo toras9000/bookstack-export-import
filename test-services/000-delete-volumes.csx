@@ -1,4 +1,4 @@
-#r "nuget: Lestaly, 0.83.0"
+#r "nuget: Lestaly.General, 0.100.0"
 #load ".settings.csx"
 #nullable enable
 using Lestaly;

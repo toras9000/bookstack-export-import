@@ -1,6 +1,6 @@
 #r "nuget: System.Interactive.Async, 6.0.1"
-#r "nuget: Lestaly, 0.83.0"
-#load "modules/.bookstack-api-helper.csx"
+#r "nuget: Lestaly.General, 0.100.0"
+#load "modules/.bookstack-helper.csx"
 #load "modules/.bookstack-data.csx"
 #nullable enable
 using System.Net.Http;
@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using BookStackApiClient;
+using BookStackApiClient.Utility;
 using Kokuban;
 using Lestaly;
 
@@ -55,12 +56,15 @@ return await Paved.ProceedAsync(async () =>
     // Create client and helper
     var apiUri = new Uri(settings.BookStack.ServiceUrl, "/api/");
     var apiKey = new ApiKey(settings.BookStack.ApiToken, settings.BookStack.ApiSecret);
-    using var helper = new BookStackClientHelper(apiUri, apiKey, cancelToken: signal.Token);
+    using var http = new HttpClient();
+    using var client = new BookStackClient(apiUri, apiKey.Token, apiKey.Secret);
+    using var helper = new BookStackClientHelper(client, signal.Token);
+    helper.HandleLimitMessage();
 
     // Detect BookStack version
-    var version = await helper.DetectBookStackVersionAsync(settings.BookStack.ServiceUrl);
+    var version = await http.DetectBookStackVersionAsync(settings.BookStack.ServiceUrl);
     if (version == null) throw new PavedMessageException("Unable to detect BookStack version.", PavedMessageKind.Warning);
-    if (version < new BookStackVersion("23.12.0")) throw new PavedMessageException("Unsupported BookStack version.", PavedMessageKind.Warning);
+    if (version < BookStackVersion.Parse("23.12.0")) throw new PavedMessageException("Unsupported BookStack version.", PavedMessageKind.Warning);
 
     // Have the user enter the location of the data to be captured.
     WriteLine("Specify the directory for the imported data.");
@@ -71,11 +75,10 @@ return await Paved.ProceedAsync(async () =>
     // Reads information from imported data
     if (!importDataDir.Exists) throw new PavedMessageException("ImportImport data directory does not exist.", PavedMessageKind.Warning);
     var exportMeta = await importDataDir.RelativeFile("export-meta.json").ReadJsonAsync<ExportMetadata>(signal.Token) ?? throw new PavedMessageException("Information is not readable when exporting.");
-    if (!BookStackVersion.TryParse(exportMeta.version, out var dataVersion)) throw new PavedMessageException("Unable to recognize the version of imported data.");
-    if (dataVersion < version) throw new PavedMessageException("Importing into versions older than the original is not supported.", PavedMessageKind.Warning);
+    if (version < exportMeta.version) throw new PavedMessageException("Importing into versions older than the original is not supported.", PavedMessageKind.Warning);
 
     // Create context instance
-    var context = new ImportContext(helper, importDataDir, signal.Token);
+    var context = new ImportContext(helper, http, importDataDir, signal.Token);
 
     // Obtain instance information
     var instance = await scopeAction(async () =>
@@ -83,7 +86,7 @@ return await Paved.ProceedAsync(async () =>
         // If the setting is to run only on an empty instance, check for the existence of a book.
         if (settings.Options.OnlyEmptyInstance)
         {
-            var books = await context.Helper.Try(s => s.ListBooksAsync(new(count: 1), context.CancelToken));
+            var books = await context.Helper.Try((c, _) => c.ListBooksAsync(new(count: 1), context.CancelToken));
             if (0 < books.data.Length) throw new PavedMessageException("Cancelled due to the existence of a book in the instance to be imported.", PavedMessageKind.Warning);
         }
 
@@ -159,7 +162,7 @@ return await Paved.ProceedAsync(async () =>
         }
 
         // Create book
-        var book = await context.Helper.Try(s => s.CreateBookAsync(new(bookMeta.name, description_html: bookMeta.description, tags: bookMeta.tags), bookCoverFile?.FullName, cancelToken: context.CancelToken));
+        var book = await context.Helper.Try((c, _) => c.CreateBookAsync(new(bookMeta.name, description_html: bookMeta.description, tags: bookMeta.tags), bookCoverFile?.FullName, cancelToken: context.CancelToken));
 
         // Restore book permissions
         if (settings.Options.RestorePermissions && bookMeta.permissions != null)
@@ -197,7 +200,7 @@ return await Paved.ProceedAsync(async () =>
 
                 // Create chapter.
                 WriteLine($"  Chapter: {Chalk.Green[chapterMeta.name]} ...");
-                var chapter = await context.Helper.Try(c => c.CreateChapterAsync(new(book.id, chapterMeta.name, description_html: chapterMeta.description, tags: chapterMeta.tags), context.CancelToken));
+                var chapter = await context.Helper.Try((c, _) => c.CreateChapterAsync(new(book.id, chapterMeta.name, description_html: chapterMeta.description, tags: chapterMeta.tags), context.CancelToken));
 
                 // Restore chapter permissions
                 if (settings.Options.RestorePermissions && chapterMeta.permissions != null)
@@ -247,7 +250,7 @@ return await Paved.ProceedAsync(async () =>
             var args = new CreateShelfArgs(meta.name, description_html: meta.description, tags: meta.tags, books: shelf.ImportedBooks);
             var imgPath = shelf.Info.Cover?.FullName;
             var imgName = Path.GetFileName(meta.cover?.url);
-            await context.Helper.Try(s => s.CreateShelfAsync(args, imgPath, imgName, cancelToken: context.CancelToken));
+            await context.Helper.Try((c, _) => c.CreateShelfAsync(args, imgPath, imgName, cancelToken: context.CancelToken));
 
             // Restore book permissions
             if (settings.Options.RestorePermissions && meta.permissions != null)
@@ -258,9 +261,9 @@ return await Paved.ProceedAsync(async () =>
         else
         {
             // If there is a shelf with the same name, let the book belong only.
-            var currentShelf = await context.Helper.Try(s => s.ReadShelfAsync(existShelf.id, context.CancelToken));
+            var currentShelf = await context.Helper.Try((c, _) => c.ReadShelfAsync(existShelf.id, context.CancelToken));
             var newBooks = currentShelf.books.Select(b => b.id).Concat(meta.books).ToArray();
-            await context.Helper.Try(s => s.UpdateShelfAsync(existShelf.id, new(books: newBooks), cancelToken: context.CancelToken));
+            await context.Helper.Try((c, _) => c.UpdateShelfAsync(existShelf.id, new(books: newBooks), cancelToken: context.CancelToken));
         }
     }
 
@@ -268,7 +271,7 @@ return await Paved.ProceedAsync(async () =>
 
 });
 
-record ImportContext(BookStackClientHelper Helper, DirectoryInfo ImportDir, CancellationToken CancelToken);
+record ImportContext(BookStackClientHelper Helper, HttpClient Http, DirectoryInfo ImportDir, CancellationToken CancelToken);
 record ImportInstance(BookStackVersion Version, IReadOnlyList<ShelfSummary> Shelves, IReadOnlySet<string> BookTitles, IReadOnlyList<UserSummary> Users, IReadOnlyList<RoleSummary> Roles);
 record ImportShelfInfo(ShelfMetadata Meta, FileInfo? Cover);
 record ShelfMapInfo(ImportShelfInfo Info, IReadOnlySet<long> SourceBooks, List<long> ImportedBooks);
@@ -305,7 +308,7 @@ async ValueTask<PageItem?> importPageAsync(ImportContext context, DirectoryInfo 
     }
 
     // Create page
-    var page = await context.Helper.Try(s => s.CreatePageAsync(createArgs, context.CancelToken));
+    var page = await context.Helper.Try((c, _) => c.CreatePageAsync(createArgs, context.CancelToken));
 
     // Enumeration options for single-level searches
     var oneLvEnum = new EnumerationOptions();
@@ -329,7 +332,7 @@ async ValueTask<PageItem?> importPageAsync(ImportContext context, DirectoryInfo 
             if (attachMeta.external)
             {
                 // Attach external links
-                var attachment = await context.Helper.Try(s => s.CreateLinkAttachmentAsync(new(attachMeta.name, page.id, attachMeta.content), context.CancelToken));
+                var attachment = await context.Helper.Try((c, _) => c.CreateLinkAttachmentAsync(new(attachMeta.name, page.id, attachMeta.content), context.CancelToken));
             }
             else
             {
@@ -337,7 +340,7 @@ async ValueTask<PageItem?> importPageAsync(ImportContext context, DirectoryInfo 
                 var attachBin = attachMeta.content.DecodeBase64();
                 if (attachBin == null) continue;
                 var attachName = $"{attachMeta.name}.{attachMeta.extension}";
-                var attachment = await context.Helper.Try(s => s.CreateFileAttachmentAsync(new(attachMeta.name, page.id), attachBin, attachName, context.CancelToken));
+                var attachment = await context.Helper.Try((c, _) => c.CreateFileAttachmentAsync(new(attachMeta.name, page.id), attachBin, attachName, context.CancelToken));
             }
         }
     }
@@ -361,7 +364,7 @@ async ValueTask<PageItem?> importPageAsync(ImportContext context, DirectoryInfo 
             }
 
             // Create an image
-            var image = await context.Helper.Try(s => s.CreateImageAsync(new(page.id, imageMeta.type, imageMeta.name), imageFile.FullName, cancelToken: context.CancelToken));
+            var image = await context.Helper.Try((c, _) => c.CreateImageAsync(new(page.id, imageMeta.type, imageMeta.name), imageFile.FullName, cancelToken: context.CancelToken));
 
         }
     }
@@ -396,5 +399,5 @@ async ValueTask<ContentPermissionsItem> restorePermissionsAsync(ImportContext co
         }
     }
 
-    return await context.Helper.Try(s => s.UpdateContentPermissionsAsync(type, id, new(impOwnerId, rolePerms.ToArray(), permissions.fallback_permissions), cancelToken: context.CancelToken));
+    return await context.Helper.Try((c, _) => c.UpdateContentPermissionsAsync(type, id, new(impOwnerId, rolePerms.ToArray(), permissions.fallback_permissions), cancelToken: context.CancelToken));
 }

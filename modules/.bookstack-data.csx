@@ -1,8 +1,8 @@
-#r "nuget: BookStackApiClient, 25.5.0-lib.1"
+#r "nuget: BookStackApiClient, 25.5.0-lib.3"
 #nullable enable
 using BookStackApiClient;
 
-record ExportMetadata(string service_url, string version, DateTime export_at, User export_by);
+record ExportMetadata(string service_url, BookStackVersion version, DateTime export_at, User export_by);
 
 record ShelfMetadata(
     long id, string name, string slug, string description, long[] books,
