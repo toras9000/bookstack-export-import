@@ -1,13 +1,10 @@
 #r "nuget: BookStackApiClient, 25.7.0-lib.1"
-#r "nuget: Kokuban, 0.2.0"
 #nullable enable
-using System.Diagnostics.CodeAnalysis;
 using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading;
 using BookStackApiClient;
 using BookStackApiClient.Utility;
-using Kokuban;
 
 /// <summary>API key information</summary>
 /// <param name="Token">API token</param>
@@ -17,10 +14,11 @@ public record ApiKey(string Token, string Secret);
 /// <summary>Attempt to detect the version of BookStack.</summary>
 /// <param name="self">BookStackClientHelper instance</param>
 /// <param name="pageUri">BookStack page used for detection.</param>
+/// <param name="breaker">Cancellation token.</param>
 /// <returns>Task to obtain version.</returns>
-public static async ValueTask<BookStackVersion?> DetectBookStackVersionAsync(this HttpClient self, Uri pageUri)
+public static async ValueTask<BookStackVersion?> DetectBookStackVersionAsync(this HttpClient self, Uri pageUri, CancellationToken breaker = default)
 {
-    var page = await self.GetStringAsync(pageUri);
+    var page = await self.GetStringAsync(pageUri, breaker);
     var detector = new Regex(@"""http.+\.css\?version=v(.+)""");
     var match = detector.Match(page);
     if (match.Success && BookStackVersion.TryParse(match.Groups[1].Value, out var version))
@@ -28,19 +26,6 @@ public static async ValueTask<BookStackVersion?> DetectBookStackVersionAsync(thi
         return version;
     }
     return default;
-}
-
-/// <summary>Handle API limitations and output messages.</summary>
-/// <param name="self">BookStackClientHelper instance</param>
-public static void HandleLimitMessage(this BookStackClientHelper self)
-{
-    self.LimitHandler += (args) =>
-    {
-        WriteLine(Chalk.Yellow[$"Caught in API call rate limitation. Rate limit: {args.Exception.RequestsPerMin} [per minute], {args.Exception.RetryAfter} seconds to lift the limit."]);
-        WriteLine(Chalk.Yellow[$"It will automatically retry after a period of time has elapsed."]);
-        WriteLine(Chalk.Yellow[$"[Waiting...]"]);
-        return ValueTask.CompletedTask;
-    };
 }
 
 /// <summary>Attempts to acquire information about the API user itself.</summary>

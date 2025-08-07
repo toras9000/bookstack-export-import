@@ -1,3 +1,4 @@
+#r "nuget: Kokuban, 0.2.0"
 #r "nuget: Lestaly.General, 0.102.0"
 #load "modules/.bookstack-helper.csx"
 #load "modules/.bookstack-data.csx"
@@ -49,7 +50,13 @@ return await Paved.ProceedAsync(async () =>
     using var http = new HttpClient();
     using var client = new BookStackClient(apiUri, apiKey.Token, apiKey.Secret);
     using var helper = new BookStackClientHelper(client, signal.Token);
-    helper.HandleLimitMessage();
+    helper.LimitHandler += (args) =>
+    {
+        WriteLine(Chalk.Yellow[$"Caught in API call rate limitation. Rate limit: {args.Exception.RequestsPerMin} [per minute], {args.Exception.RetryAfter} seconds to lift the limit."]);
+        WriteLine(Chalk.Yellow[$"It will automatically retry after a period of time has elapsed."]);
+        WriteLine(Chalk.Yellow[$"[Waiting...]"]);
+        return ValueTask.CompletedTask;
+    };
 
     // Detect BookStack version
     var version = await http.DetectBookStackVersionAsync(settings.BookStack.ServiceUrl);

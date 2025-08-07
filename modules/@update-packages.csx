@@ -24,7 +24,6 @@ var settings = new
         new("MySqlConnector",             "2.4.0"         ),
         new("BCrypt.Net-Next",            "4.0.3"         ),
         new("NuGet.Protocol",             "6.14.0"        ),
-        new("System.Interactive.Async",   "6.0.3"         ),
     },
 };
 

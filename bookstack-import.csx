@@ -1,4 +1,5 @@
-#r "nuget: System.Interactive.Async, 6.0.3"
+#r "nuget: R3, 1.3.0"
+#r "nuget: Kokuban, 0.2.0"
 #r "nuget: Lestaly.General, 0.102.0"
 #load "modules/.bookstack-helper.csx"
 #load "modules/.bookstack-data.csx"
@@ -11,6 +12,7 @@ using BookStackApiClient;
 using BookStackApiClient.Utility;
 using Kokuban;
 using Lestaly;
+using R3;
 
 var settings = new
 {
@@ -59,7 +61,13 @@ return await Paved.ProceedAsync(async () =>
     using var http = new HttpClient();
     using var client = new BookStackClient(apiUri, apiKey.Token, apiKey.Secret);
     using var helper = new BookStackClientHelper(client, signal.Token);
-    helper.HandleLimitMessage();
+    helper.LimitHandler += (args) =>
+    {
+        WriteLine(Chalk.Yellow[$"Caught in API call rate limitation. Rate limit: {args.Exception.RequestsPerMin} [per minute], {args.Exception.RetryAfter} seconds to lift the limit."]);
+        WriteLine(Chalk.Yellow[$"It will automatically retry after a period of time has elapsed."]);
+        WriteLine(Chalk.Yellow[$"[Waiting...]"]);
+        return ValueTask.CompletedTask;
+    };
 
     // Detect BookStack version
     var version = await http.DetectBookStackVersionAsync(settings.BookStack.ServiceUrl);
@@ -91,13 +99,13 @@ return await Paved.ProceedAsync(async () =>
         }
 
         // Retrieve all shelf information.
-        var shelves = await context.Helper.EnumerateAllShelvesAsync().ToArrayAsync(context.CancelToken);
+        var shelves = await context.Helper.EnumerateAllShelvesAsync().ToObservable().ToArrayAsync(context.CancelToken);
 
         // When performing same title skipping, perform acquisition of all existing book titles.
         var bookTitles = default(HashSet<string>);
         if (settings.Options.SkipSameTitle)
         {
-            bookTitles = await context.Helper.EnumerateAllBooksAsync().Select(b => b.name).ToHashSetAsync(context.CancelToken);
+            bookTitles = await context.Helper.EnumerateAllBooksAsync().ToObservable().Select(b => b.name).ToHashSetAsync(context.CancelToken);
         }
 
         // Retrieve user and role information for the import destination instance when restoring permissions.
@@ -105,8 +113,8 @@ return await Paved.ProceedAsync(async () =>
         var roles = default(RoleSummary[]);
         if (settings.Options.RestorePermissions)
         {
-            users = await context.Helper.EnumerateAllUsersAsync().ToArrayAsync(context.CancelToken);
-            roles = await context.Helper.EnumerateAllRolesAsync().ToArrayAsync(context.CancelToken);
+            users = await context.Helper.EnumerateAllUsersAsync().ToObservable().ToArrayAsync(context.CancelToken);
+            roles = await context.Helper.EnumerateAllRolesAsync().ToObservable().ToArrayAsync(context.CancelToken);
         }
 
         return new ImportInstance(version, shelves, bookTitles ?? [], users ?? [], roles ?? []);

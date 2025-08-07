@@ -21,7 +21,7 @@ async Task makeTestApiTokenAsync(InstanceSettings settings)
 {
     WriteLine("Prepare db connection ...");
     var config = new MySqlConnectionStringBuilder();
-    config.Server = "localhost";
+    config.Server = settings.Database.Host;
     config.Port = settings.Database.Port;
     config.UserID = settings.Database.Username;
     config.Password = settings.Database.Password;

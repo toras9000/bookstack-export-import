@@ -1,7 +1,8 @@
+#r "nuget: BookStackApiClient, 25.7.0-lib.1"
+#r "nuget: Kokuban, 0.2.0"
 #r "nuget: Lestaly.General, 0.102.0"
 #r "nuget: SkiaSharp, 3.119.0"
 #r "nuget: Bogus, 35.6.3"
-#load "../modules/.bookstack-helper.csx"
 #load ".settings.csx"
 #nullable enable
 using System.Net.Http;
@@ -10,6 +11,7 @@ using System.Xml.Linq;
 using Bogus;
 using BookStackApiClient;
 using BookStackApiClient.Utility;
+using Kokuban;
 using Lestaly;
 using SkiaSharp;
 
@@ -25,12 +27,14 @@ return await Paved.ProceedAsync(noPause: Args.RoughContains("--no-pause"), async
 async Task createDummyBooksAsync(InstanceSettings settings, CancellationToken cancelToken)
 {
     // Number of objects to be generated.
-    var genBooks = new { min = 3, max = 6, };
-    var genContents = new { min = 3, max = 6, };
-    var genSubPages = new { min = 2, max = 4, };
-    var genPageImages = new { min = 2, max = 3, };
-    var genPageAttaches = new { min = 2, max = 3, };
-    var genShelves = 3;
+    var random = new RandomContext(
+        Books: new(Min: 3, Max: 6),
+        Contents: new(Min: 3, Max: 6),
+        SubPages: new(Min: 2, Max: 4),
+        Images: new(Min: 2, Max: 3),
+        Attaches: new(Min: 2, Max: 3),
+        Shelves: new(Min: 3, Max: 3)
+    );
 
     // Force option
     var forceGenerate = false;
@@ -40,11 +44,14 @@ async Task createDummyBooksAsync(InstanceSettings settings, CancellationToken ca
     WriteLine($"BookStack Service URL : {settings.BookStack.Url}");
 
     // Create client and helper
-    var apiEndpoint = settings.BookStack.ApiEndpoint;
-    var apiToken = settings.BookStack.ApiTokenId;
-    var apiSecret = settings.BookStack.ApiTokenSecret;
-    using var helper = new BookStackClientHelper(apiEndpoint, apiToken, apiSecret, cancelToken);
-    helper.HandleLimitMessage();
+    using var helper = new BookStackClientHelper(settings.BookStack.ApiEndpoint, settings.BookStack.ApiTokenId, settings.BookStack.ApiTokenSecret, cancelToken);
+    helper.LimitHandler += (args) =>
+    {
+        WriteLine(Chalk.Yellow[$"Caught in API call rate limitation. Rate limit: {args.Exception.RequestsPerMin} [per minute], {args.Exception.RetryAfter} seconds to lift the limit."]);
+        WriteLine(Chalk.Yellow[$"It will automatically retry after a period of time has elapsed."]);
+        WriteLine(Chalk.Yellow[$"[Waiting...]"]);
+        return ValueTask.CompletedTask;
+    };
 
     // If not forced, check the status.
     if (!forceGenerate)
@@ -53,12 +60,14 @@ async Task createDummyBooksAsync(InstanceSettings settings, CancellationToken ca
         if (0 < books.data.Length) throw new PavedMessageException("Some kind of book already exists.", PavedMessageKind.Warning);
     }
 
+    // Generation context
+    var context = new GenerationContext(settings.BookStack.Url, helper, random);
+
     // List to group books. Create shelves for later.
-    var bookBinders = Enumerable.Range(0, genShelves).Select(_ => new List<long>()).ToArray();
+    var bookBinders = context.Random.Shelves.Range().Select(_ => new List<long>()).ToArray();
 
     // Create a dummy objects.
-    var bookCount = Random.Shared.Next(genBooks.min, genBooks.max + 1);
-    for (var b = 0; b < bookCount; b++)
+    for (var b = 0; b < context.Random.Books.Count(); b++)
     {
         var bookNum = 1 + b;
         WriteLine($"Create dummy Book {bookNum} ...");
@@ -68,70 +77,30 @@ async Task createDummyBooksAsync(InstanceSettings settings, CancellationToken ca
         var binder = bookBinders.ElementAtOrDefault(Random.Shared.Next(bookBinders.Length + 1));    // Include outliers.
         binder?.Add(book.id);
 
-        var contentCount = Random.Shared.Next(genContents.min, genContents.max + 1);
-        for (var c = 0; c < contentCount; c++)
+        for (var c = 0; c < context.Random.Contents.Count(); c++)
         {
             var contentNum = 1 + c;
-            if (Random.Shared.Next(2) == 0)
+            if (context.Random.Fifty())
             {
                 var pageLabel = $"B{bookNum}-P{contentNum}";
+                var pageLink = $"B{bookNum}/P{contentNum}";
                 WriteLine($"  Create dummy content {contentNum} Page ...");
-                var page = Random.Shared.Next(2) switch
-                {
-                    0 => await helper.Try((c, t) => c.CreateMarkdownPageInBookAsync(new(book.id, $"Page {pageLabel}", ContentGenerator.CreatePageMarkdown(3)), t)),
-                    _ => await helper.Try((c, t) => c.CreateHtmlPageInBookAsync(new(book.id, $"Page {pageLabel}", ContentGenerator.CreatePageHtml(3)), t)),
-                };
-
-                await createPageMaterials(page, pageLabel, $"B{bookNum}/P{contentNum}");
+                await createPageAsync(context, book.id, default, pageLabel, pageLink);
             }
             else
             {
                 WriteLine($"  Create dummy content {contentNum} Chapter ...");
                 var chapterLabel = $"B{bookNum}-C{contentNum}";
                 var chapter = await helper.Try((c, t) => c.CreateChapterAsync(new(book.id, $"Chapter {chapterLabel}", $"Generated {DateTime.Now:yyyy/MM/dd HH:mm:ss.fff}"), t));
-                var pageCount = Random.Shared.Next(genSubPages.min, genSubPages.max + 1);
-                for (var p = 0; p < pageCount; p++)
+                for (var p = 0; p < context.Random.SubPages.Count(); p++)
                 {
                     var pageNum = 1 + p;
                     var pageLabel = $"B{bookNum}-C{contentNum}-P{pageNum}";
+                    var pageLink = $"B{bookNum}/C{contentNum}/P{pageNum}";
                     WriteLine($"    Create dummy page {pageLabel} and materials ...");
-                    var page = Random.Shared.Next(2) switch
-                    {
-                        0 => await helper.Try((c, t) => c.CreateMarkdownPageInChapterAsync(new(chapter.id, $"Page {pageLabel}", ContentGenerator.CreatePageMarkdown(3)), t)),
-                        _ => await helper.Try((c, t) => c.CreateHtmlPageInChapterAsync(new(chapter.id, $"Page {pageLabel}", ContentGenerator.CreatePageHtml(3)), t)),
-                    };
-
-                    await createPageMaterials(page, pageLabel, $"B{bookNum}/C{contentNum}/P{pageNum}");
+                    await createPageAsync(context, book.id, chapter.id, pageLabel, pageLink);
                 }
             }
-
-            async ValueTask createPageMaterials(PageItem page, string pageLabel, string linkPath)
-            {
-                var imageCount = Random.Shared.Next(genPageImages.min, genPageImages.max + 1);
-                for (var i = 0; i < imageCount; i++)
-                {
-                    var imageLabel = $"{pageLabel}-{i}";
-                    var imageBin = ContentGenerator.CreateTextImage(imageLabel);
-                    var image = await helper.Try((c, t) => c.CreateImageAsync(new(page.id, "gallery", $"Image-{imageLabel}"), imageBin, $"{imageLabel}.png", t));
-                }
-
-                var attachCount = Random.Shared.Next(genPageAttaches.min, genPageAttaches.max + 1);
-                for (var a = 0; a < attachCount; a++)
-                {
-                    var attachLabel = $"{pageLabel}-{a}";
-                    if (Random.Shared.Next(2) == 0)
-                    {
-                        var attachBin = Encoding.UTF8.GetBytes($"TextContent-{attachLabel}");
-                        var attach = await helper.Try((c, t) => c.CreateFileAttachmentAsync(new($"Text-{attachLabel}", page.id), attachBin, $"{attachLabel}.txt", t));
-                    }
-                    else
-                    {
-                        var attachLink = new Uri(settings.BookStack.Url, $"/{linkPath}/{a}");
-                        var attach = await helper.Try((c, t) => c.CreateLinkAttachmentAsync(new($"Text-{attachLabel}", page.id, attachLink.AbsoluteUri), t));
-                    }
-                }
-            }
-
         }
     }
 
@@ -144,6 +113,53 @@ async Task createDummyBooksAsync(InstanceSettings settings, CancellationToken ca
     }
 
     WriteLine($"Completed");
+}
+
+public record RandomRange(int Min, int Max)
+{
+    public IEnumerable<int> Range() => Enumerable.Range(0, this.Count());
+    public int Count() => Random.Shared.Next(this.Min, this.Max + 1);
+}
+public record RandomContext(RandomRange Books, RandomRange Contents, RandomRange SubPages, RandomRange Images, RandomRange Attaches, RandomRange Shelves)
+{
+    public bool Fifty() => Random.Shared.Next(2) == 0;
+}
+public record GenerationContext(Uri Url, BookStackClientHelper Helper, RandomContext Random);
+
+async ValueTask<PageItem> createPageAsync(GenerationContext context, long book, long? chapter, string pageLabel, string linkPath)
+{
+    var doctype = context.Random.Fifty() ? "HTML" : "MD";
+    var html = doctype == "HTML" ? ContentGenerator.CreatePageHtml(3) : default;
+    var markdown = doctype == "MD" ? ContentGenerator.CreatePageMarkdown(3) : default;
+    var page = await context.Helper.Try((c, t) => c.CreatePageAsync(new(name: $"Page {pageLabel} {doctype}", book, chapter, html, markdown), t));
+
+    for (var i = 0; i < context.Random.Images.Count(); i++)
+    {
+        var imageLabel = $"{pageLabel}-{i}";
+        var imageBin = ContentGenerator.CreateTextImage(imageLabel);
+        var image = await context.Helper.Try((c, t) => c.CreateImageAsync(new(page.id, "gallery", $"Image-{imageLabel}"), imageBin, $"{imageLabel}.png", t));
+        if (doctype == "HTML") html = html.TieIn($"""<br><a href="{image.url}" target="_blank" rel="noopener"><img src="{image.url}" alt="{imageLabel}"></a>""");
+        else markdown = markdown.TieIn($"\n[![Image-{imageLabel}]({image.url})]({image.url})");
+    }
+
+    page = await context.Helper.Try((c, t) => c.UpdatePageAsync(page.id, new(html: html, markdown: markdown), t));
+
+    for (var a = 0; a < context.Random.Attaches.Count(); a++)
+    {
+        var attachLabel = $"{pageLabel}-{a}";
+        if (Random.Shared.Next(2) == 0)
+        {
+            var attachBin = Encoding.UTF8.GetBytes($"TextContent-{attachLabel}");
+            var attach = await context.Helper.Try((c, t) => c.CreateFileAttachmentAsync(new($"Text-{attachLabel}", page.id), attachBin, $"{attachLabel}.txt", t));
+        }
+        else
+        {
+            var attachLink = new Uri(context.Url, $"/{linkPath}/{a}");
+            var attach = await context.Helper.Try((c, t) => c.CreateLinkAttachmentAsync(new($"Text-{attachLabel}", page.id, attachLink.AbsoluteUri), t));
+        }
+    }
+
+    return page;
 }
 
 /// <summary>

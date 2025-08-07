@@ -4,7 +4,7 @@
 using Lestaly;
 using Lestaly.Cx;
 
-return await Paved.ProceedAsync(async () =>
+return await Paved.ProceedAsync(noPause: Args.RoughContains("--no-pause"), async () =>
 {
     WriteLine("Stop service & remove volume");
     await "docker".args("compose", "--file", settings.Instance1.Docker.Compose, "down", "--remove-orphans", "--volumes").echo().result().success();

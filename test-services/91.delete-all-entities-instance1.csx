@@ -1,5 +1,6 @@
+#r "nuget: BookStackApiClient, 25.7.0-lib.1"
+#r "nuget: Kokuban, 0.2.0"
 #r "nuget: Lestaly.General, 0.102.0"
-#load "../modules/.bookstack-helper.csx"
 #load ".settings.csx"
 #nullable enable
 using System.Threading;
@@ -8,7 +9,7 @@ using BookStackApiClient.Utility;
 using Kokuban;
 using Lestaly;
 
-await Paved.RunAsync(async () =>
+return await Paved.ProceedAsync(noPause: Args.RoughContains("--no-pause"), async () =>
 {
     var instance = settings.Instance1;
 
@@ -25,7 +26,13 @@ await Paved.RunAsync(async () =>
     var apiToken = instance.BookStack.ApiTokenId;
     var apiSecret = instance.BookStack.ApiTokenSecret;
     using var helper = new BookStackClientHelper(apiEndpoint, apiToken, apiSecret, signal.Token);
-    helper.HandleLimitMessage();
+    helper.LimitHandler += (args) =>
+    {
+        WriteLine(Chalk.Yellow[$"Caught in API call rate limitation. Rate limit: {args.Exception.RequestsPerMin} [per minute], {args.Exception.RetryAfter} seconds to lift the limit."]);
+        WriteLine(Chalk.Yellow[$"It will automatically retry after a period of time has elapsed."]);
+        WriteLine(Chalk.Yellow[$"[Waiting...]"]);
+        return ValueTask.CompletedTask;
+    };
 
     // Delete image gallery images
     WriteLine($"Delete Gallery Images");

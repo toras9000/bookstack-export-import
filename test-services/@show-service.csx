@@ -3,7 +3,6 @@
 #nullable enable
 using System.Threading;
 using Lestaly;
-using Lestaly.Cx;
 
 return await Paved.ProceedAsync(noPause: Args.RoughContains("--no-pause"), async () =>
 {
