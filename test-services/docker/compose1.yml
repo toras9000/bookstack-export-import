@@ -44,6 +44,10 @@ services:
           - bookstack-app-container
     ports:
       - "8811:80"
+    volumes:
+      - type: volume
+        source: bookstack-app-data
+        target: /config
     healthcheck:
       test: curl -f -s http://localhost:80 || exit 1
       start_period: 300s
@@ -51,10 +55,6 @@ services:
       timeout: 5s
       interval: 300s
       retries: 3
-    volumes:
-      - type: volume
-        source: bookstack-app-data
-        target: /config
     environment:
       - TZ=Asia/Tokyo
       - PUID=1000

@@ -1,4 +1,4 @@
-#r "nuget: Lestaly.General, 0.100.0"
+#r "nuget: Lestaly.General, 0.102.0"
 #r "nuget: SkiaSharp, 3.119.0"
 #r "nuget: Bogus, 35.6.3"
 #load "../modules/.bookstack-helper.csx"

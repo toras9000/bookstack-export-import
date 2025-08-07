@@ -1,13 +1,9 @@
 #r "nuget: Kokuban, 0.2.0"
-#r "nuget: Lestaly.General, 0.100.0"
+#r "nuget: Lestaly.General, 0.102.0"
 #nullable enable
 using System.Text.RegularExpressions;
 using Kokuban;
 using Lestaly;
-
-// Rewrite the version of the script to the specified version.
-// The vscode/C# extension recognizes only one package version for all scripts in the workspace.
-// If there are discrepancies, the IntelliSense will not work properly, so the versions should be aligned.
 
 var settings = new
 {
@@ -17,24 +13,20 @@ var settings = new
     // Packages and versions to be unified and updated
     Packages = new PackageVersion[]
     {
-        new("BookStackApiClient",                    "25.5.0-lib.3"),
-        new("Lestaly.General",                       "0.100.0"),
-        new("SkiaSharp",                             "3.119.0"),
-        new("Faker.Net",                             "2.0.163"),
-        new("Bogus",                                 "35.6.3"),
-        new("Kokuban",                               "0.2.0"),
-        new("R3",                                    "1.3.0"),
-        new("Dapper",                                "2.1.66"),
-        new("MySqlConnector",                        "2.4.0"),
-        new("BCrypt.Net-Next",                       "4.0.3"),
+        new("BookStackApiClient",         "25.7.0-lib.1"  ),
+        new("Lestaly.General",            "0.102.0"       ),
+        new("SkiaSharp",                  "3.119.0"       ),
+        new("Faker.Net",                  "2.0.163"       ),
+        new("Bogus",                      "35.6.3"        ),
+        new("Kokuban",                    "0.2.0"         ),
+        new("R3",                         "1.3.0"         ),
+        new("Dapper",                     "2.1.66"        ),
+        new("MySqlConnector",             "2.4.0"         ),
+        new("BCrypt.Net-Next",            "4.0.3"         ),
+        new("NuGet.Protocol",             "6.14.0"        ),
+        new("System.Interactive.Async",   "6.0.3"         ),
     },
 };
-
-// Package version information data type
-record PackageVersion(string Name, string Version)
-{
-    public SemanticVersion SemanticVersion { get; } = SemanticVersion.Parse(Version);
-}
 
 return await Paved.ProceedAsync(async () =>
 {
@@ -74,14 +66,14 @@ return await Paved.ProceedAsync(async () =>
             // Parse the version number.
             if (!SemanticVersion.TryParse(match.Groups["version"].Value, out var pkgVer))
             {
-                WriteLine(Chalk.BrightYellow[$"  Skip: Unable to recognize version number"]);
+                WriteLine(Chalk.Yellow[$"  Skip: Unable to recognize version number"]);
                 continue;
             }
 
             // Determine if the package version needs to be updated.
             if (pkgVer == package.SemanticVersion)
             {
-                WriteLine(Chalk.BrightYellow[$"  Skip: {pkgName} - Already in version"]);
+                WriteLine(Chalk.Gray[$"  Skip: {pkgName} - Already in version"]);
                 continue;
             }
 
@@ -101,9 +93,14 @@ return await Paved.ProceedAsync(async () =>
         }
         else if (!detected)
         {
-            WriteLine(Chalk.BrightYellow[$"  Directive not found"]);
+            WriteLine(Chalk.Gray[$"  Directive not found"]);
         }
     }
 
 });
 
+// Package version information data type
+record PackageVersion(string Name, string Version)
+{
+    public SemanticVersion SemanticVersion { get; } = SemanticVersion.Parse(Version);
+}

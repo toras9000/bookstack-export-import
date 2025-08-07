@@ -1,4 +1,4 @@
-#r "nuget: BookStackApiClient, 25.5.0-lib.3"
+#r "nuget: BookStackApiClient, 25.7.0-lib.1"
 #nullable enable
 using BookStackApiClient;
 

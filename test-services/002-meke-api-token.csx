@@ -1,4 +1,4 @@
-#r "nuget: Lestaly.General, 0.100.0"
+#r "nuget: Lestaly.General, 0.102.0"
 #r "nuget: Dapper, 2.1.66"
 #r "nuget: MySqlConnector, 2.4.0"
 #r "nuget: BCrypt.Net-Next, 4.0.3"
